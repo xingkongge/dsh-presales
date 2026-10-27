@@ -221,6 +221,8 @@ window.__ModuleLoader__.load({
       const [cart, setCart] = React.useState([])
       const [busy, setBusy] = React.useState(false)
       const [lastQuote, setLastQuote] = React.useState(null)
+      const [updates, setUpdates] = React.useState(null)
+      const [updating, setUpdating] = React.useState('')
       const [msg, setMsg] = React.useState(null)
 
       const customer = customers.find((c) => c.id === customerId) || null
@@ -304,6 +306,39 @@ window.__ModuleLoader__.load({
           setCart([])
           const qs = await api('quotes'); setQuotes(qs.items || [])
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setBusy(false) }
+      }
+
+      async function checkUpdates() {
+        setBusy(true); setMsg(null)
+        try {
+          const r = await api('update_check')
+          setUpdates(r.repos || [])
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setBusy(false) }
+      }
+
+      async function doUpdate(key) {
+        setUpdating(key); setMsg(null)
+        try {
+          const r = await api('update', { method: 'POST', body: JSON.stringify({ key }) })
+          setMsg({ kind: 'ok', text: `已更新 ${r.installed}，请完全重启 DSH 生效` })
+          await checkUpdates()
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setUpdating('') }
+      }
+
+      function renderUpdateCard() {
+        return h('section', { className: 'presales-card' },
+          h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+            h('div', { className: 'presales-muted' }, '插件更新（GitHub Releases）'),
+            h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void checkUpdates() }, '检查更新')),
+          updates ? h('div', null, updates.map((u) => {
+            const label = (u.key === 'cnbm' ? 'cnbm知识库' : '数字售前') + ` 本地 ${u.local || '?'} · 最新 ${u.latest || '?'}` + (u.hasUpdate ? ' · 有更新' : '')
+            return h('div', { key: u.key, className: 'presales-row', style: { justifyContent: 'space-between', marginTop: 8 } },
+              h('span', null, label),
+              u.error ? h('span', { className: 'presales-muted' }, u.error)
+                : u.hasUpdate ? h('button', { className: 'presales-btn', type: 'button', disabled: Boolean(updating), onClick: () => void doUpdate(u.key) }, updating === u.key ? '更新中…' : '更新')
+                  : h('span', { className: 'presales-muted' }, '已是最新'))
+          })) : null,
+          h('div', { className: 'presales-muted', style: { marginTop: 6 } }, '仓库：xingkongge/dsh-cnbm-wps365、xingkongge/dsh-presales（公开）'))
       }
 
       const tabBtn = (id, label) => h('button', {
@@ -396,7 +431,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'presales-muted', style: { marginBottom: 6 } }, '最近报价'),
           quotes.length ? h('ul', { className: 'presales-quotes' }, quotes.map((q) => h('li', { key: q.quoteNo },
             h('span', null, h('b', null, q.quoteNo), ` ${q.customerName || ''} · ${q.status}`),
-            h('span', null, q.link ? h('a', { href: q.link, target: '_blank', rel: 'noreferrer', style: { marginRight: 10 } }, '打开') : null, `含税 ${money(q.grossTotal)}`)))) : h('div', { className: 'presales-muted' }, '暂无')))
+            h('span', null, q.link ? h('a', { href: q.link, target: '_blank', rel: 'noreferrer', style: { marginRight: 10 } }, '打开') : null, `含税 ${money(q.grossTotal)}`)))) : h('div', { className: 'presales-muted' }, '暂无')), renderUpdateCard())
     }
 
     class Boundary extends React.Component {

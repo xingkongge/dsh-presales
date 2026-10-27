@@ -5,7 +5,9 @@
  *   产品检索 → 计价/校验 → 报价落库（报价单/版本/明细）→ Markdown 出单。
  * 不持有主数据，不缓存凭证（凭证仍在 wps365-cli 钥匙串里）。
  */
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import path from 'node:path'
 import { homedir } from 'node:os'
 import crypto from 'node:crypto'
@@ -49,6 +51,8 @@ const DEFAULTS = {
   minMarginWarn: DEFAULT_MIN_MARGIN,
   outputDir: '',
   tables: {},
+  updateRepos: { cnbm: 'xingkongge/dsh-cnbm-wps365', presales: 'xingkongge/dsh-presales' },
+  githubToken: '',
 }
 
 const fmt = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-')
@@ -936,6 +940,60 @@ export function apply(ctx, rawConfig = {}) {
     return { quoteNo, quoteId, versionId, itemCount: itemIds.length, grossTotal: dto.totals.grossTotal }
   }
 
+  // ── 插件更新（GitHub Releases） ─────────────────────────────
+  const execFileAsync = promisify(execFile)
+  const PKG_CNBM = '@cnbm/dsh-wps365'
+
+  async function localPresalesVersion() {
+    try { return JSON.parse(await readFile(new URL('./package.json', import.meta.url), 'utf8')).version } catch { return '' }
+  }
+
+  async function installedVersion(pkg) {
+    const dir = process.env.DSH_PROFILE_DIR
+    if (!dir) return ''
+    try { return JSON.parse(await readFile(path.join(dir, 'node_modules', pkg, 'package.json'), 'utf8')).version } catch { return '' }
+  }
+
+  async function ghLatest(repo) {
+    const headers = { 'user-agent': 'dsh-presales-updater', accept: 'application/vnd.github+json' }
+    if (config.githubToken) headers.authorization = `Bearer ${config.githubToken}`
+    const r = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, { headers })
+    if (!r.ok) throw new Error(`GitHub ${r.status}`)
+    const d = await r.json()
+    const asset = (d.assets || []).find((a) => String(a.name).endsWith('.tgz'))
+    return { tag: d.tag_name, published: d.published_at, asset: asset ? { name: asset.name, url: asset.browser_download_url } : null }
+  }
+
+  async function checkUpdates() {
+    const out = []
+    for (const [key, repo] of Object.entries(config.updateRepos || {})) {
+      if (!repo) continue
+      try {
+        const latest = await ghLatest(repo)
+        const local = key === 'cnbm' ? await installedVersion(PKG_CNBM) : await localPresalesVersion()
+        out.push({ key, repo, latest: latest.tag, local, asset: latest.asset, hasUpdate: Boolean(local && latest.tag && String(latest.tag).replace(/^v/, '') !== String(local)) })
+      } catch (e) {
+        out.push({ key, repo, error: String(e.message || e) })
+      }
+    }
+    return out
+  }
+
+  async function updatePlugin(key) {
+    const repo = (config.updateRepos || {})[key]
+    if (!repo) throw new Error(`未配置 ${key} 的仓库`)
+    const latest = await ghLatest(repo)
+    if (!latest.asset) throw new Error('该 Release 没有 tgz 资产')
+    const res = await fetch(latest.asset.url, { headers: { 'user-agent': 'dsh-presales-updater' } })
+    if (!res.ok) throw new Error(`下载失败 ${res.status}`)
+    const file = path.join(tmpdir(), latest.asset.name)
+    await writeFile(file, Buffer.from(await res.arrayBuffer()))
+    const dsh = process.env.DSH_CLI || 'dsh'
+    const profile = process.env.DSH_PROFILE || 'desktop'
+    await execFileAsync(dsh, ['plugin', '--profile', profile, 'add', file], { timeout: 300000 })
+    return { installed: latest.asset.name, tag: latest.tag, restartRequired: true }
+  }
+
   // webServer 可能晚于本插件激活，必须等它出现再注册路由（与 cnbm 同一写法）。
   function mountPanel(runtime) {
     const webServer = runtime.webServer || (typeof runtime.get === 'function' ? runtime.get('webServer') : undefined)
@@ -1050,6 +1108,18 @@ export function apply(ctx, rawConfig = {}) {
             }])
             await updateRecord('opportunities', r._id, { '最后跟进时间': d })
             return json(res, 200, { ok: true })
+          }
+          if (route === 'update_check') {
+            return json(res, 200, { ok: true, repos: await checkUpdates() })
+          }
+          if (route === 'update' && req.method === 'POST') {
+            const body = await readBody(req)
+            try {
+              const out = await updatePlugin(body.key)
+              return json(res, 200, { ok: true, ...out })
+            } catch (e) {
+              return json(res, 400, { ok: false, error: String(e && e.message ? e.message : e) })
+            }
           }
           if (route === 'status') {
             const r = await ready()
