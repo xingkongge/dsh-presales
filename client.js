@@ -9,6 +9,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
     const PANEL_ID = 'presales'
     let uiWorkspace = null
+    let uiLayout = null
     const NEW_OPP_PROMPT = `你是数字售前助手，请用自然语言帮我新建商机。\n\n直接说清楚：客户名称、商机名称、金额（万元）、阶段、预计落单时间、联系人/电话、行业、项目简介。\n例如：给华东某化工集团新建商机「双重预防平台」，金额 386 万，阶段需求沟通，预计 2026-11-20 落单，联系人王工。\n\n我会先调 opp_list 查重，再用 opp_create 建档；缺字段会追问。`
     const API = '/presales/api/'
     const HDR = { 'x-dsh-presales': '1' }
@@ -225,6 +226,7 @@ window.__ModuleLoader__.load({
       const [lastQuote, setLastQuote] = React.useState(null)
       const [updates, setUpdates] = React.useState(null)
       const [updating, setUpdating] = React.useState('')
+      const [chatNotice, setChatNotice] = React.useState('')
       const [msg, setMsg] = React.useState(null)
 
       const customer = customers.find((c) => c.id === customerId) || null
@@ -345,14 +347,18 @@ window.__ModuleLoader__.load({
 
       function newOppChat() {
         const svc = uiWorkspace
-        if (!svc || typeof svc.startSession !== 'function') {
-          setMsg({ kind: 'err', text: '当前 DSH 版本不支持直接新建会话，请点左上角「新建会话」并粘贴需求。' })
-          return
+        const copyPrompt = () => {
+          try { navigator.clipboard.writeText(NEW_OPP_PROMPT) } catch { /* ignore */ }
+          setChatNotice('已把「新建商机」提示词复制到剪贴板：请点左上角「新建会话」后直接粘贴发送。')
         }
+        if (!svc || typeof svc.startSession !== 'function') { copyPrompt(); return }
         try {
           svc.startSession(undefined, { prompt: NEW_OPP_PROMPT, whenDraftExists: 'append' })
+          if (uiLayout && typeof uiLayout.selectPanel === 'function') uiLayout.selectPanel(null)
+          setChatNotice('已打开新会话，提示词已填入输入框；补充客户和金额后发送即可。')
         } catch (e) {
-          setMsg({ kind: 'err', text: String(e.message || e) })
+          setChatNotice('打开新会话失败：' + String(e.message || e) + '（已复制提示词，可手动新建会话粘贴）')
+          try { navigator.clipboard.writeText(NEW_OPP_PROMPT) } catch { /* ignore */ }
         }
       }
 
@@ -371,6 +377,7 @@ window.__ModuleLoader__.load({
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void newOppChat() }, '新建商机（对话）'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
           h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('opp', '商机'), tabBtn('quote', '报价')),
+          chatNotice ? h('div', { className: 'presales-msg ok' }, chatNotice) : null,
           h(OppTab, { onQuote: () => setTab('quote') }))
       }
 
@@ -484,6 +491,7 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         try { ensureStyles(ctx) } catch { /* ignore */ }
         try { uiWorkspace = ctx.get('uiWorkspace') || null } catch { uiWorkspace = null }
+        try { uiLayout = ctx.get('layout') || null } catch { uiLayout = null }
         const safe = (slot, register) => {
           try { ctx.slots.inject(slot, register) } catch (e) { try { ctx.logger?.warn?.(`[presales] ${slot} 注册失败：${e && e.message}`) } catch { /* ignore */ } }
         }
