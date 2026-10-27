@@ -1,0 +1,7 @@
+# 售前数字员工（报价）插件。
+# 依赖 wps365-cli 已登录且令牌含 kso.dbsheet.readwrite。
+# 表别名默认指向 AI事业部知识库/售前数字员工 下的 6 个业务库，可在 config.tables 覆盖。
+- insert:
+    - id: presales
+      name: '@cnbm/dsh-presales'
+      config: {}

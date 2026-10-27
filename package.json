@@ -1,0 +1,45 @@
+{
+  "name": "@cnbm/dsh-presales",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "description": "数字售前：商机管理 + 报价（WPS 产品清单联动、计价校验、报价落库与出单）。",
+  "icon": "./icon.svg",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./icon": "./icon.svg",
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/",
+    "locale/",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "wps",
+    "quote",
+    "presales"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
