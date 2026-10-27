@@ -10,6 +10,7 @@ window.__ModuleLoader__.load({
     const PANEL_ID = 'presales'
     let uiWorkspace = null
     let uiLayout = null
+    let clientCtx = null
     const NEW_OPP_PROMPT = `你是数字售前助手，请用自然语言帮我新建商机。\n\n直接说清楚：客户名称、商机名称、金额（万元）、阶段、预计落单时间、联系人/电话、行业、项目简介。\n例如：给华东某化工集团新建商机「双重预防平台」，金额 386 万，阶段需求沟通，预计 2026-11-20 落单，联系人王工。\n\n我会先调 opp_list 查重，再用 opp_create 建档；缺字段会追问。`
     const API = '/presales/api/'
     const HDR = { 'x-dsh-presales': '1' }
@@ -345,16 +346,34 @@ window.__ModuleLoader__.load({
           h('div', { className: 'presales-muted', style: { marginTop: 6 } }, '仓库：xingkongge/dsh-cnbm-wps365、xingkongge/dsh-presales（公开）'))
       }
 
+      function getSvc(name) {
+        try {
+          if (clientCtx && typeof clientCtx.get === 'function') {
+            const v = clientCtx.get(name)
+            if (v) return v
+          }
+        } catch { /* ignore */ }
+        if (name === 'uiWorkspace') return uiWorkspace
+        if (name === 'layout') return uiLayout
+        return null
+      }
+
       function newOppChat() {
-        const svc = uiWorkspace
+        const svc = getSvc('uiWorkspace')
+        const lay = getSvc('layout')
         const copyPrompt = () => {
           try { navigator.clipboard.writeText(NEW_OPP_PROMPT) } catch { /* ignore */ }
           setChatNotice('已把「新建商机」提示词复制到剪贴板：请点左上角「新建会话」后直接粘贴发送。')
         }
-        if (!svc || typeof svc.startSession !== 'function') { copyPrompt(); return }
+        if (!svc || typeof svc.startSession !== 'function') {
+          const sessions = getSvc('sessions')
+          setChatNotice(`当前拿不到新建会话接口（uiWorkspace=${svc ? '有' : '无'}，sessions=${sessions ? '有' : '无'}）。已复制提示词，请点左上角「新建会话」粘贴。`)
+          copyPrompt()
+          return
+        }
         try {
           svc.startSession(undefined, { prompt: NEW_OPP_PROMPT, whenDraftExists: 'append' })
-          if (uiLayout && typeof uiLayout.selectPanel === 'function') uiLayout.selectPanel(null)
+          if (lay && typeof lay.selectPanel === 'function') lay.selectPanel(null)
           setChatNotice('已打开新会话，提示词已填入输入框；补充客户和金额后发送即可。')
         } catch (e) {
           setChatNotice('打开新会话失败：' + String(e.message || e) + '（已复制提示词，可手动新建会话粘贴）')
@@ -489,9 +508,18 @@ window.__ModuleLoader__.load({
       name: '@cnbm/dsh-presales',
       inject: ['slots'],
       apply(ctx) {
+        clientCtx = ctx
         try { ensureStyles(ctx) } catch { /* ignore */ }
         try { uiWorkspace = ctx.get('uiWorkspace') || null } catch { uiWorkspace = null }
         try { uiLayout = ctx.get('layout') || null } catch { uiLayout = null }
+        try {
+          if (typeof ctx.inject === 'function') {
+            ctx.inject(['uiWorkspace', 'layout'], (sub) => {
+              uiWorkspace = sub.uiWorkspace || uiWorkspace
+              uiLayout = sub.layout || uiLayout
+            })
+          }
+        } catch { /* 忽略：点击时会再取一次 */ }
         const safe = (slot, register) => {
           try { ctx.slots.inject(slot, register) } catch (e) { try { ctx.logger?.warn?.(`[presales] ${slot} 注册失败：${e && e.message}`) } catch { /* ignore */ } }
         }

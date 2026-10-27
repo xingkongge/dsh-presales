@@ -1,6 +1,6 @@
 {
   "name": "@cnbm/dsh-presales",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "private": true,
   "type": "module",
   "description": "数字售前：商机管理 + 报价（WPS 产品清单联动、计价校验、报价落库与出单）。",
