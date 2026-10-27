@@ -63,13 +63,40 @@ export function apply(ctx, rawConfig = {}) {
   const config = { ...DEFAULTS, ...(rawConfig && typeof rawConfig === 'object' ? rawConfig : {}) }
   const tables = resolveTables(config)
 
+  // 后台静默续期：剩余 < 15 分钟且有 refresh token 时自动刷新
+  if (typeof ctx.effect === 'function') ctx.effect(() => {
+    const tick = async () => {
+      try {
+        const cli = resolveCliPath(config)
+        if (!cli) return
+        const auth = await readAuthStatus(cli, config)
+        if (!auth.ok) return
+        const d = auth.delegated || {}
+        const remain = Number(d.remaining_seconds) || 0
+        if (d.has_refresh && (d.status !== 'valid' || remain < 900)) {
+          await runCli(cli, ['auth', 'refresh', '--delegated', '-o', 'json'], config)
+        }
+      } catch { /* 静默 */ }
+    }
+    const timer = setInterval(tick, 10 * 60 * 1000)
+    setTimeout(tick, 30 * 1000).unref?.()
+    return () => clearInterval(timer)
+  })
+
   const register = (def) => ctx.tools.register(def)
 
   async function ready() {
     const cli = resolveCliPath(config)
     if (!cli) return { error: '❌ 未安装 wps365-cli。安装：curl -fsSL https://open-docs.wpscdn.cn/cli/install.sh | bash' }
-    const auth = await readAuthStatus(cli, config)
+    let auth = await readAuthStatus(cli, config)
     if (!auth.ok) return { error: '❌ 无法读取认证状态，请先在 cnbm知识库 面板登录。' }
+    if (!auth.delegated.available || auth.delegated.status !== 'valid') {
+      // 先用 refresh token 静默续期，续不上才需要人扫码
+      if (auth.delegated.has_refresh) {
+        const refreshed = await runCli(cli, ['auth', 'refresh', '--delegated', '-o', 'json'], config)
+        if (refreshed.ok) auth = await readAuthStatus(cli, config)
+      }
+    }
     if (!auth.delegated.available || auth.delegated.status !== 'valid') {
       return { error: '🔐 WPS 授权已失效，请到 cnbm知识库 面板重新登录后再试。' }
     }
