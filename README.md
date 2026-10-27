@@ -75,3 +75,10 @@ dsh plugin --profile desktop add /Users/liangli/Documents/deepseek-harness/defau
 - 完成后需**完全重启 DSH**。
 
 仓库：`xingkongge/dsh-cnbm-wps365`、`xingkongge/dsh-presales`（public）。
+
+
+## 面板 tab 与「新建商机（对话）」
+
+- tab 顺序：**商机 → 报价**，默认打开商机；
+- 商机 tab 右上「新建商机（对话）」：调用客户端 `uiWorkspace.startSession` 打开新会话，并把数字售前的新建商机提示词预填到输入框；
+- 提示词包含客户/名称/金额/阶段/落单时间/联系人/行业/简介的填写说明，发送后 Agent 会先 `opp_list` 查重再 `opp_create`。

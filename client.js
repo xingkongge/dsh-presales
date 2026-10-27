@@ -8,6 +8,8 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const h = React.createElement
     const PANEL_ID = 'presales'
+    let uiWorkspace = null
+    const NEW_OPP_PROMPT = `你是数字售前助手，请用自然语言帮我新建商机。\n\n直接说清楚：客户名称、商机名称、金额（万元）、阶段、预计落单时间、联系人/电话、行业、项目简介。\n例如：给华东某化工集团新建商机「双重预防平台」，金额 386 万，阶段需求沟通，预计 2026-11-20 落单，联系人王工。\n\n我会先调 opp_list 查重，再用 opp_create 建档；缺字段会追问。`
     const API = '/presales/api/'
     const HDR = { 'x-dsh-presales': '1' }
 
@@ -207,7 +209,7 @@ window.__ModuleLoader__.load({
     }
 
     function Panel() {
-      const [tab, setTab] = React.useState('quote')
+      const [tab, setTab] = React.useState('opp')
       const [status, setStatus] = React.useState(null)
       const [customers, setCustomers] = React.useState([])
       const [opps, setOpps] = React.useState([])
@@ -341,6 +343,19 @@ window.__ModuleLoader__.load({
           h('div', { className: 'presales-muted', style: { marginTop: 6 } }, '仓库：xingkongge/dsh-cnbm-wps365、xingkongge/dsh-presales（公开）'))
       }
 
+      function newOppChat() {
+        const svc = uiWorkspace
+        if (!svc || typeof svc.startSession !== 'function') {
+          setMsg({ kind: 'err', text: '当前 DSH 版本不支持直接新建会话，请点左上角「新建会话」并粘贴需求。' })
+          return
+        }
+        try {
+          svc.startSession(undefined, { prompt: NEW_OPP_PROMPT, whenDraftExists: 'append' })
+        } catch (e) {
+          setMsg({ kind: 'err', text: String(e.message || e) })
+        }
+      }
+
       const tabBtn = (id, label) => h('button', {
         key: id, className: 'presales-tab', type: 'button', role: 'tab', 'aria-selected': tab === id,
         onClick: () => setTab(id),
@@ -353,8 +368,9 @@ window.__ModuleLoader__.load({
               h('div', { className: 'presales-title' }, '商机管理'),
               h('div', { className: 'presales-sub' }, '阶段推进 · 跟进记录 · 变更留痕 · 关联报价与产物')),
             h('div', { className: 'presales-row' },
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => void newOppChat() }, '新建商机（对话）'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('quote', '报价'), tabBtn('opp', '商机')),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('opp', '商机'), tabBtn('quote', '报价')),
           h(OppTab, { onQuote: () => setTab('quote') }))
       }
 
@@ -365,7 +381,7 @@ window.__ModuleLoader__.load({
             h('div', { className: 'presales-sub' }, '产品来自 WPS 产品清单；保存后写入报价管理（报价单 + V1 + 明细）')),
           h('div', { className: 'presales-row' },
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-        h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('quote', '报价'), tabBtn('opp', '商机')),
+        h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('opp', '商机'), tabBtn('quote', '报价')),
         status ? h('div', { className: 'presales-card presales-row' },
           h('span', { className: `presales-badge ${status.ok ? 'ok' : 'err'}` }, status.ok ? 'WPS 已连接' : '未连接'),
           h('span', { className: 'presales-muted' }, `产品 ${status.counts?.products ?? '-'} · 客户 ${status.counts?.customers ?? '-'} · 报价 ${status.counts?.quotes ?? '-'}`)) : null,
@@ -467,6 +483,7 @@ window.__ModuleLoader__.load({
       inject: ['slots'],
       apply(ctx) {
         try { ensureStyles(ctx) } catch { /* ignore */ }
+        try { uiWorkspace = ctx.get('uiWorkspace') || null } catch { uiWorkspace = null }
         const safe = (slot, register) => {
           try { ctx.slots.inject(slot, register) } catch (e) { try { ctx.logger?.warn?.(`[presales] ${slot} 注册失败：${e && e.message}`) } catch { /* ignore */ } }
         }
