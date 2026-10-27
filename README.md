@@ -63,3 +63,15 @@ dsh plugin --profile desktop add /Users/liangli/Documents/deepseek-harness/defau
 ```
 
 改源码需完全重启应用。测试：`node --test test/`。
+
+
+## 面板更新（v0.7+）
+
+报价 tab 底部「插件更新」卡片：
+
+- 「检查更新」→ GitHub Releases latest（公开仓库，无需 token）；
+- 有新版 → 显示本地/最新版本 + 「更新」按钮；
+- 「更新」→ Host 下载 tgz 并执行 `dsh plugin --profile <profile> add <tgz>`；
+- 完成后需**完全重启 DSH**。
+
+仓库：`xingkongge/dsh-cnbm-wps365`、`xingkongge/dsh-presales`（public）。

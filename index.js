@@ -988,9 +988,17 @@ export function apply(ctx, rawConfig = {}) {
     if (!res.ok) throw new Error(`下载失败 ${res.status}`)
     const file = path.join(tmpdir(), latest.asset.name)
     await writeFile(file, Buffer.from(await res.arrayBuffer()))
-    const dsh = process.env.DSH_CLI || 'dsh'
     const profile = process.env.DSH_PROFILE || 'desktop'
-    await execFileAsync(dsh, ['plugin', '--profile', profile, 'add', file], { timeout: 300000 })
+    const candidates = [process.env.DSH_CLI, 'dsh', '/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh'].filter(Boolean)
+    let lastError = null
+    for (const dsh of candidates) {
+      try {
+        await execFileAsync(dsh, ['plugin', '--profile', profile, 'add', file], { timeout: 300000 })
+        lastError = null
+        break
+      } catch (e) { lastError = e }
+    }
+    if (lastError) throw lastError
     return { installed: latest.asset.name, tag: latest.tag, restartRequired: true }
   }
 
