@@ -11,7 +11,10 @@ window.__ModuleLoader__.load({
     let uiWorkspace = null
     let uiLayout = null
     let clientCtx = null
-    const NEW_OPP_PROMPT = `你是数字售前助手，请用自然语言帮我新建商机。\n\n直接说清楚：客户名称、商机名称、金额（万元）、阶段、预计落单时间、联系人/电话、行业、项目简介。\n例如：给华东某化工集团新建商机「双重预防平台」，金额 386 万，阶段需求沟通，预计 2026-11-20 落单，联系人王工。\n\n我会先调 opp_list 查重，再用 opp_create 建档；缺字段会追问。`
+    const NEW_OPP_PROMPT = `你是数字售前助手。请先调用 opp_board 确认后台数据连接正常，然后用一两句话回复用户：
+「后台数据连接正常。请用自然语言描述你要新建的商机（客户、项目/商机名称、金额、阶段、预计落单时间、联系人等），我来帮你建档。」
+不要列举、比对或引用知识库里已有的商机数据，也不要输出示例清单。
+用户回复后，调用 opp_create 新建商机；缺关键字段时简短追问，成功后只回复商机编号和已写入的字段摘要。`
     const API = '/presales/api/'
     const HDR = { 'x-dsh-presales': '1' }
 
