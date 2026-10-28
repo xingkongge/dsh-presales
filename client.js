@@ -110,7 +110,7 @@ window.__ModuleLoader__.load({
           setItems(ls.items || []); setBoard(bd)
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
-      React.useEffect(() => { void load(); void checkUpdates() }, [])
+      React.useEffect(() => { void load() }, [])
 
       async function open(no) {
         setBusy(true); setMsg(null)
