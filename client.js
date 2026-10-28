@@ -229,6 +229,7 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = React.useState(false)
       const [lastQuote, setLastQuote] = React.useState(null)
       const [updates, setUpdates] = React.useState(null)
+      const [updatesOpen, setUpdatesOpen] = React.useState(false)
       const [updating, setUpdating] = React.useState('')
       const [chatNotice, setChatNotice] = React.useState('')
       const [oppPrompt, setOppPrompt] = React.useState('')
@@ -363,6 +364,21 @@ window.__ModuleLoader__.load({
         return null
       }
 
+      async function scanTemplates() {
+        setBusy(true); setMsg(null)
+        try {
+          const r = await api('template_scan', { method: 'POST' })
+          setMsg({ kind: 'ok', text: `已扫描模板目录，新增 ${r.added || 0} 个自定义模板` })
+          await load()
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setBusy(false) }
+      }
+
+      async function toggleUpdates() {
+        const next = !updatesOpen
+        setUpdatesOpen(next)
+        if (next && !updates) await checkUpdates()
+      }
+
       async function newOppChat() {
         const prompt = oppPrompt || FALLBACK_OPP_PROMPT
         const svc = getSvc('uiWorkspace')
@@ -425,8 +441,10 @@ window.__ModuleLoader__.load({
               h('div', { className: 'presales-sub' }, '阶段推进 · 跟进记录 · 变更留痕 · 关联报价与产物')),
             h('div', { className: 'presales-row' },
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void newOppChat() }, '新建商机（对话）'),
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
           h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('opp', '商机'), tabBtn('quote', '报价')),
+          updatesOpen ? renderUpdateCard() : null,
           chatNotice ? h('div', { className: 'presales-msg ok' }, chatNotice) : null,
           h(OppTab, { onQuote: () => setTab('quote') }))
       }
@@ -437,8 +455,10 @@ window.__ModuleLoader__.load({
             h('div', { className: 'presales-title' }, '报价工作台'),
             h('div', { className: 'presales-sub' }, '产品来自 WPS 产品清单；保存后写入报价管理（报价单 + V1 + 明细）')),
           h('div', { className: 'presales-row' },
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新'),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
         h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('opp', '商机'), tabBtn('quote', '报价')),
+        updatesOpen ? renderUpdateCard() : null,
         status ? h('div', { className: 'presales-card presales-row' },
           h('span', { className: `presales-badge ${status.ok ? 'ok' : 'err'}` }, status.ok ? 'WPS 已连接' : '未连接'),
           h('span', { className: 'presales-muted' }, `产品 ${status.counts?.products ?? '-'} · 客户 ${status.counts?.customers ?? '-'} · 报价 ${status.counts?.quotes ?? '-'}`)) : null,
@@ -454,6 +474,9 @@ window.__ModuleLoader__.load({
             h('label', null, h('span', { className: 'presales-label' }, '报价模板'), h('select', {
               className: 'presales-select', value: template, onChange: (e) => setTemplate(e.target.value),
             }, templates.map((t) => h('option', { key: t.name, value: t.name }, `${t.name}${t.default ? '（默认）' : ''}`)))))),
+          h('div', { className: 'presales-row', style: { marginTop: 8 } },
+            h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void scanTemplates() }, '扫描新模板'),
+            h('span', { className: 'presales-muted' }, '把自定义 xlsx 放进「报价管理/报价模板/」后点扫描；模板里用 {{...}} 占位')),
         h('section', { className: 'presales-card' },
           h('div', { className: 'presales-row' },
             h('input', {
@@ -504,7 +527,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'presales-muted', style: { marginBottom: 6 } }, '最近报价'),
           quotes.length ? h('ul', { className: 'presales-quotes' }, quotes.map((q) => h('li', { key: q.quoteNo },
             h('span', null, h('b', null, q.quoteNo), ` ${q.customerName || ''} · ${q.status}`),
-            h('span', null, q.link ? h('a', { href: q.link, target: '_blank', rel: 'noreferrer', style: { marginRight: 10 } }, '打开') : null, `含税 ${money(q.grossTotal)}`)))) : h('div', { className: 'presales-muted' }, '暂无')), renderUpdateCard())
+            h('span', null, q.link ? h('a', { href: q.link, target: '_blank', rel: 'noreferrer', style: { marginRight: 10 } }, '打开') : null, `含税 ${money(q.grossTotal)}`)))) : h('div', { className: 'presales-muted' }, '暂无')))
     }
 
     class Boundary extends React.Component {

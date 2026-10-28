@@ -51,6 +51,7 @@ const DEFAULTS = {
   defaultTaxRate: DEFAULT_TAX_RATE,
   minMarginWarn: DEFAULT_MIN_MARGIN,
   outputDir: '',
+  templateFolderNode: 'cuHskXQMMJkZ',
   tables: {},
   updateRepos: { cnbm: 'xingkongge/dsh-cnbm-wps365', presales: 'xingkongge/dsh-presales' },
   githubToken: '',
@@ -746,7 +747,7 @@ export function apply(ctx, rawConfig = {}) {
       const itemIds = await create('quoteItems', rows)
       let link = ''
       try {
-        const rendered = await renderQuoteXlsx(dto, { quoteNo, version: 'V1', date: today(), customerName: dto.customerName || '', validUntil })
+        const rendered = await renderByTemplate(dto, { quoteNo, version: 'V1', date: today(), customerName: dto.customerName || '', validUntil }, tplName)
         link = rendered.link || ''
         if (link) await updateRecord('quotes', quoteId, { '文件链接': link })
         await registerDocument({ quoteNo, version: 'V1', customerName: dto.customerName, opportunityNo: dto.opportunityNo, fileName: rendered.name, link })
@@ -808,7 +809,7 @@ export function apply(ctx, rawConfig = {}) {
       })))
       let link = ''
       try {
-        const rendered = await renderQuoteXlsx(dto, { quoteNo, version, date: today(), customerName: dto.customerName, validUntil: last?.['有效期至'] || '' })
+        const rendered = await renderByTemplate(dto, { quoteNo, version, date: today(), customerName: dto.customerName, validUntil: last?.['有效期至'] || '' }, q['模板'])
         link = rendered.link || ''
         await updateRecord('quotes', q._id, {
           '当前版本': version, '不含税合计': dto.totals.untaxedTotal, '税额合计': dto.totals.taxTotal,
@@ -897,6 +898,118 @@ export function apply(ctx, rawConfig = {}) {
     }
     const fm = await runCli(cli, ['api', 'get', `/v7/files/${fileId}/meta`, '-o', 'json'])
     return { fileId, name, link: fm.json?.data?.link_url || '', sheetId: sid }
+  }
+
+  // ── 自定义模板：扫描 + 按模板渲染 ──────────────────────────
+  async function scanTemplates() {
+    const folderNode = config.templateFolderNode || 'cuHskXQMMJkZ'
+    const items = await wikiChildren(folderNode)
+    const existing = await list('quoteTemplates')
+    const known = new Set(existing.map((x) => x['文件ID']))
+    const cli = await cliOk()
+    let added = 0
+    for (const it of items) {
+      if (it.type !== 'file' || !/\.xlsx$/i.test(it.name)) continue
+      const meta = await runCli(cli, ['api', 'get', `/v7/files/${it.id}/meta`, '-o', 'json'])
+      const real = meta.json?.data?.id
+      const link = meta.json?.data?.link_url || ''
+      if (!real || known.has(real)) continue
+      await create('quoteTemplates', [{
+        '模板名称': it.name.replace(/\.xlsx$/i, ''),
+        '模板类型': '自定义',
+        '版本': 'V1',
+        '适用场景': '用户上传的自定义模板',
+        '文件链接': link,
+        '文件ID': real,
+        '启用状态': '启用',
+        '默认模板': false,
+        '占位符规范': '支持 {{项目名称}} {{客户名称}} {{报价单号}} {{报价日期}} {{报价人}} {{报价版本}} {{含税合计}} {{未税合计}} {{税额合计}}；明细行放 {{序号}} {{产品类型}} {{产品名称}} {{规格}} {{品牌}} {{型号}} {{单价}} {{单位}} {{数量}} {{总价}} {{税率}} {{备注}}（可复制多行占位行）。',
+        '备注': '由扫描 报价模板/ 目录自动登记',
+      }])
+      added += 1
+    }
+    return { added, total: items.filter((x) => /\.xlsx$/i.test(x.name)).length }
+  }
+
+  async function copyTemplateAndFill(tpl, dto, meta) {
+    const folderNode = await ensureRenderFolder()
+    const cli = await cliOk()
+    const folderMeta = await runCli(cli, ['api', 'get', `/v7/files/${folderNode}/meta`, '-o', 'json'])
+    const folderReal = folderMeta.json?.data?.id
+    const before = new Set((await wikiChildren(folderNode)).map((x) => x.id))
+    const copied = await runCli(cli, ['drive', 'file', 'batch-copy', SPACE, '--file-ids', tpl['文件ID'], '--dst-drive-id', SPACE, '--dst-parent-id', folderReal, '-o', 'json'])
+    if (!copied.ok) throw new Error(`复制模板失败：${copied.stderr || copied.stdout}`)
+    let node = null
+    for (let i = 0; i < 30 && !node; i += 1) {
+      await new Promise((r) => setTimeout(r, 800))
+      node = (await wikiChildren(folderNode)).find((x) => !before.has(x.id) && x.type === 'file') || null
+    }
+    if (!node) throw new Error('复制模板超时')
+    const metaRes = await runCli(cli, ['api', 'get', `/v7/files/${node.id}/meta`, '-o', 'json'])
+    const realId = metaRes.json?.data?.id
+    const safeCustomer = String(dto.customerName || '').replace(/[\\/:*?"<>|]/g, '_').slice(0, 30)
+    const name = `${meta.quoteNo || 'DRAFT'}_${safeCustomer}_${tpl['模板名称'] || '报价单'}.xlsx`
+    await runCli(cli, ['drive', 'file', 'rename', SPACE, realId, '--name', name, '-o', 'json'])
+    const sheets = await runCli(cli, ['api', 'get', `/v7/sheets/${realId}/worksheets`, '-o', 'json'])
+    const sid = sheets.json?.data?.sheets?.[0]?.sheet_id
+    const rng = await runCli(cli, ['api', 'get', `/v7/sheets/${realId}/worksheets/${sid}/range_data`, '--query', 'row_from=0', '--query', 'row_to=80', '--query', 'col_from=0', '--query', 'col_to=20', '-o', 'json'])
+    const cells = rng.json?.data?.range_data || []
+    const scalar = {
+      '{{项目名称}}': dto.customerName || meta.customerName || '',
+      '{{客户名称}}': dto.customerName || meta.customerName || '',
+      '{{报价单号}}': meta.quoteNo || '',
+      '{{报价日期}}': meta.date || today(),
+      '{{报价人}}': meta.sales || '',
+      '{{报价版本}}': meta.version || 'V1',
+      '{{含税合计}}': dto.totals?.grossTotal ?? '',
+      '{{未税合计}}': dto.totals?.untaxedTotal ?? '',
+      '{{税额合计}}': dto.totals?.taxTotal ?? '',
+      '{{方案概述}}': meta.notes || '',
+      '{{服务内容}}': meta.service || '',
+      '{{售后保障}}': meta.warranty || '',
+      '{{报价说明}}': meta.notes || '',
+    }
+    const slots = []
+    for (const c of cells) {
+      const t = String(c.cell_text || '')
+      if (t.includes('{{序号}}') || t.includes('{{产品名称}}')) slots.push(c.row_from)
+    }
+    const uniqSlots = [...new Set(slots)].sort((a, b) => a - b)
+    const slotIndexFor = new Map(uniqSlots.map((r, i) => [r, i]))
+    const items = dto.lines || []
+    const updates = []
+    for (const c of cells) {
+      const t = String(c.cell_text || '')
+      if (!t.includes('{{')) continue
+      let value = null
+      if (t.includes('{{序号}}') || t.includes('{{产品名称}}')) {
+        const idx = slotIndexFor.get(c.row_from)
+        const item = items[idx]
+        if (!item) continue
+        const map = {
+          '{{序号}}': item.lineNo, '{{产品类型}}': item.category || '', '{{产品名称}}': item.name,
+          '{{规格}}': item.spec || '', '{{品牌}}': item.brand || '', '{{型号}}': item.model || '',
+          '{{单价}}': item.grossUnit, '{{单位}}': item.unit || '', '{{数量}}': item.qty,
+          '{{总价}}': item.grossSubtotal, '{{税率}}': `${(Number(item.taxRate) * 100).toFixed(0)}%`, '{{备注}}': item.remark || '',
+        }
+        value = t.replace(/\{\{[^{}]+\}\}/g, (m) => (map[m] === undefined ? '' : String(map[m])))
+      } else {
+        value = t.replace(/\{\{[^{}]+\}\}/g, (m) => (scalar[m] === undefined ? '' : String(scalar[m])))
+      }
+      if (value !== null) updates.push({ row_from: c.row_from, row_to: c.row_from, col_from: c.col_from, col_to: c.col_from, op_type: 'cell_operation_type_formula', formula: value })
+    }
+    const ok = await runCli(cli, ['api', 'post', `/v7/sheets/${realId}/worksheets/${sid}/range_data/batch_update`, '--data', JSON.stringify({ range_data: updates }), '-o', 'json'])
+    if (!ok.ok) throw new Error(`写入模板失败：${ok.stderr || ok.stdout}`)
+    const fm = await runCli(cli, ['api', 'get', `/v7/files/${realId}/meta`, '-o', 'json'])
+    return { fileId: realId, name, link: fm.json?.data?.link_url || '' }
+  }
+
+  async function renderByTemplate(dto, meta, tplName) {
+    try {
+      const tpl = (await list('quoteTemplates')).find((t) => t['模板名称'] === tplName)
+      if (tpl && tpl['模板类型'] === '自定义' && tpl['文件ID']) return await copyTemplateAndFill(tpl, dto, meta)
+    } catch { /* 回退内置布局 */ }
+    return renderQuoteXlsx(dto, meta)
   }
 
   async function loadQuoteDto(quoteNo) {
@@ -1166,6 +1279,9 @@ export function apply(ctx, rawConfig = {}) {
             await updateRecord('opportunities', r._id, { '最后跟进时间': d })
             return json(res, 200, { ok: true })
           }
+          if (route === 'template_scan') {
+            try { return json(res, 200, { ok: true, ...(await scanTemplates()) }) } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
           if (route === 'skill_prompt') {
             return json(res, 200, { ok: true, prompt: NEW_OPP_PROMPT })
           }
@@ -1265,7 +1381,7 @@ export function apply(ctx, rawConfig = {}) {
             const out = await persistQuote(dto, { template: body.template })
             let rendered = null
             try {
-              rendered = await renderQuoteXlsx(dto, { quoteNo: out.quoteNo, version: 'V1', date: today(), customerName: dto.customerName, validUntil: '' })
+              rendered = await renderByTemplate(dto, { quoteNo: out.quoteNo, version: 'V1', date: today(), customerName: dto.customerName, validUntil: '' }, body.template)
               if (rendered?.link && out.quoteId) await updateRecord('quotes', out.quoteId, { '文件链接': rendered.link })
               await registerDocument({ quoteNo: out.quoteNo, version: 'V1', customerName: dto.customerName, opportunityNo: dto.opportunityNo, opportunityName: dto.opportunityName, fileName: rendered?.name, link: rendered?.link })
             } catch { /* 出单失败不影响落库 */ }
