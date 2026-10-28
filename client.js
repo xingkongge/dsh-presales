@@ -51,6 +51,7 @@ window.__ModuleLoader__.load({
 .presales-badge.err{color:var(--dsw-alias-state-error-primary)}
 .presales-badge.warn{color:var(--dsw-alias-state-warn-primary)}
 .presales-quotes{list-style:none;margin:0;padding:0}
+.presales-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#e5484d;margin-left:4px;vertical-align:middle}
 .presales-tabs{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--dsw-alias-border-l1);padding-bottom:8px}
 .presales-tab{padding:6px 14px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;font-size:13px}
 .presales-tab[aria-selected="true"]{background:var(--dsw-alias-bg-layer-1);border-color:var(--dsw-alias-border-l1);color:var(--dsw-alias-label-primary);font-weight:600}
@@ -109,7 +110,7 @@ window.__ModuleLoader__.load({
           setItems(ls.items || []); setBoard(bd)
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
-      React.useEffect(() => { void load() }, [])
+      React.useEffect(() => { void load(); void checkUpdates() }, [])
 
       async function open(no) {
         setBusy(true); setMsg(null)
@@ -254,7 +255,7 @@ window.__ModuleLoader__.load({
           if (def) setTemplate(def.name)
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
-      React.useEffect(() => { void load() }, [])
+      React.useEffect(() => { void load(); void checkUpdates() }, [])
 
       async function loadOpps(cid) {
         setOpps([]); setOppId('')
@@ -461,7 +462,7 @@ window.__ModuleLoader__.load({
               h('div', { className: 'presales-sub' }, '阶段推进 · 跟进记录 · 变更留痕 · 关联报价与产物')),
             h('div', { className: 'presales-row' },
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void newOppChat() }, '新建商机（对话）'),
-              h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新'),
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新', updates && updates.some((u) => u.hasUpdate) ? h('span', { className: 'presales-dot' }) : null),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
           h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('opp', '商机'), tabBtn('quote', '报价')),
           updatesOpen ? renderUpdateCard() : null,
@@ -475,7 +476,7 @@ window.__ModuleLoader__.load({
             h('div', { className: 'presales-title' }, '报价工作台'),
             h('div', { className: 'presales-sub' }, '产品来自 WPS 产品清单；保存后写入报价管理（报价单 + V1 + 明细）')),
           h('div', { className: 'presales-row' },
-            h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新'),
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新', updates && updates.some((u) => u.hasUpdate) ? h('span', { className: 'presales-dot' }) : null),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
         h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('opp', '商机'), tabBtn('quote', '报价')),
         updatesOpen ? renderUpdateCard() : null,
