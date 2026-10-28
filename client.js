@@ -358,25 +358,50 @@ window.__ModuleLoader__.load({
         return null
       }
 
-      function newOppChat() {
+      async function newOppChat() {
         const svc = getSvc('uiWorkspace')
+        const sessions = getSvc('sessions')
         const lay = getSvc('layout')
         const copyPrompt = () => {
           try { navigator.clipboard.writeText(NEW_OPP_PROMPT) } catch { /* ignore */ }
           setChatNotice('已把「新建商机」提示词复制到剪贴板：请点左上角「新建会话」后直接粘贴发送。')
         }
-        if (!svc || typeof svc.startSession !== 'function') {
-          const sessions = getSvc('sessions')
-          setChatNotice(`当前拿不到新建会话接口（uiWorkspace=${svc ? '有' : '无'}，sessions=${sessions ? '有' : '无'}）。已复制提示词，请点左上角「新建会话」粘贴。`)
-          copyPrompt()
-          return
-        }
+        if (!svc && !sessions) { setChatNotice('当前拿不到会话服务。已复制提示词，请手动新建会话粘贴。'); copyPrompt(); return }
         try {
-          svc.startSession(undefined, { prompt: NEW_OPP_PROMPT, whenDraftExists: 'append' })
+          // 优先：直接创建并打开一个新会话，再发送提示
+          if (sessions && typeof sessions.create === 'function') {
+            const id = await sessions.create({})
+            if (id) {
+              if (svc && typeof svc.openSession === 'function') svc.openSession(id)
+              if (lay && typeof lay.selectPanel === 'function') lay.selectPanel(null)
+              await sessions.using(id, { source: 'controllerOperation' }, async (ref) => {
+                await ref.binding.session.prompt([{ type: 'text', text: NEW_OPP_PROMPT }], 'queue')
+              })
+              setChatNotice('已新建会话并发送「新建商机」提示；直接补充客户和金额即可。')
+              return
+            }
+          }
+          // 退路：走 DSH 自己的「新建会话」，再识别新出现的会话并发送提示
+          const before = new Set((sessions && sessions.list && sessions.list.getSnapshot ? sessions.list.getSnapshot().ids : []) || [])
+          if (svc && typeof svc.startSession === 'function') svc.startSession()
           if (lay && typeof lay.selectPanel === 'function') lay.selectPanel(null)
-          setChatNotice('已打开新会话，提示词已填入输入框；补充客户和金额后发送即可。')
+          let newId = null
+          for (let i = 0; i < 20 && !newId; i += 1) {
+            await new Promise((r) => setTimeout(r, 100))
+            const ids = (sessions && sessions.list && sessions.list.getSnapshot ? sessions.list.getSnapshot().ids : []) || []
+            newId = ids.find((x) => !before.has(x)) || null
+          }
+          if (newId && sessions && typeof sessions.using === 'function') {
+            await sessions.using(newId, { source: 'controllerOperation' }, async (ref) => {
+              await ref.binding.session.prompt([{ type: 'text', text: NEW_OPP_PROMPT }], 'queue')
+            })
+            setChatNotice('已新建会话并发送「新建商机」提示；直接补充客户和金额即可。')
+          } else {
+            copyPrompt()
+            setChatNotice('已打开空白会话并复制提示词：在输入框粘贴后发送即可。')
+          }
         } catch (e) {
-          setChatNotice('打开新会话失败：' + String(e.message || e) + '（已复制提示词，可手动新建会话粘贴）')
+          setChatNotice('新建会话失败：' + String(e.message || e) + '（已复制提示词，可手动新建会话粘贴）')
           try { navigator.clipboard.writeText(NEW_OPP_PROMPT) } catch { /* ignore */ }
         }
       }
