@@ -1016,7 +1016,7 @@ export function apply(ctx, rawConfig = {}) {
   async function checkUpdates() {
     const out = []
     for (const [key, repo] of Object.entries(config.updateRepos || {})) {
-      if (!repo) continue
+      if (!repo || key !== 'presales') continue
       try {
         const latest = await ghLatest(repo)
         const local = key === 'cnbm' ? await installedVersion(PKG_CNBM) : await localPresalesVersion()

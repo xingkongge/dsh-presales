@@ -504,7 +504,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'presales-muted', style: { marginBottom: 6 } }, '最近报价'),
           quotes.length ? h('ul', { className: 'presales-quotes' }, quotes.map((q) => h('li', { key: q.quoteNo },
             h('span', null, h('b', null, q.quoteNo), ` ${q.customerName || ''} · ${q.status}`),
-            h('span', null, q.link ? h('a', { href: q.link, target: '_blank', rel: 'noreferrer', style: { marginRight: 10 } }, '打开') : null, `含税 ${money(q.grossTotal)}`)))) : h('div', { className: 'presales-muted' }, '暂无')))
+            h('span', null, q.link ? h('a', { href: q.link, target: '_blank', rel: 'noreferrer', style: { marginRight: 10 } }, '打开') : null, `含税 ${money(q.grossTotal)}`)))) : h('div', { className: 'presales-muted' }, '暂无')), renderUpdateCard())
     }
 
     class Boundary extends React.Component {
