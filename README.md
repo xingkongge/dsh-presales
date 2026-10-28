@@ -93,3 +93,9 @@ dsh plugin --profile desktop add /Users/liangli/Documents/deepseek-harness/defau
 - WPS 联动与授权边界。
 
 内容维护在 `lib/skill.js`（改完发版即可，所有会话自动可见）。
+
+
+## v0.8.1
+
+- 面板「新建商机（对话）」提示词改为由 `lib/skill.js` 的 `NEW_OPP_PROMPT` 统一提供（面板通过 `/presales/api/skill_prompt` 拉取），技能内容与按钮不再两处维护。
+- 复杂解决方案模板按《信云智联·AI产品线报价管理系统》样例重建（11 列 + 每节小计 + 版本/审核状态/交付周期）。

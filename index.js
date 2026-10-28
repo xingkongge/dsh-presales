@@ -30,7 +30,7 @@ import {
 } from './lib/pricing.js'
 import { resolveTables } from './lib/tables.js'
 import { buildQuoteLayout } from './lib/xlsx-layout.js'
-import { PRESALES_SKILL } from './lib/skill.js'
+import { PRESALES_SKILL, NEW_OPP_PROMPT } from './lib/skill.js'
 
 export const name = 'presales'
 export const inject = ['tools']
@@ -1165,6 +1165,9 @@ export function apply(ctx, rawConfig = {}) {
             }])
             await updateRecord('opportunities', r._id, { '最后跟进时间': d })
             return json(res, 200, { ok: true })
+          }
+          if (route === 'skill_prompt') {
+            return json(res, 200, { ok: true, prompt: NEW_OPP_PROMPT })
           }
           if (route === 'update_check') {
             return json(res, 200, { ok: true, repos: await checkUpdates() })

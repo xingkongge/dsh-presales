@@ -11,7 +11,7 @@ window.__ModuleLoader__.load({
     let uiWorkspace = null
     let uiLayout = null
     let clientCtx = null
-    const NEW_OPP_PROMPT = `你是数字售前助手。请先调用 opp_board 确认后台数据连接正常，然后用一两句话回复用户：
+    const FALLBACK_OPP_PROMPT = `你是数字售前助手。请先调用 opp_board 确认后台数据连接正常，然后用一两句话回复用户：
 「后台数据连接正常。请用自然语言描述你要新建的商机（客户、项目/商机名称、金额、阶段、预计落单时间、联系人等），我来帮你建档。」
 不要列举、比对或引用知识库里已有的商机数据，也不要输出示例清单。
 用户回复后，调用 opp_create 新建商机；缺关键字段时简短追问，成功后只回复商机编号和已写入的字段摘要。`
@@ -231,6 +231,7 @@ window.__ModuleLoader__.load({
       const [updates, setUpdates] = React.useState(null)
       const [updating, setUpdating] = React.useState('')
       const [chatNotice, setChatNotice] = React.useState('')
+      const [oppPrompt, setOppPrompt] = React.useState('')
       const [msg, setMsg] = React.useState(null)
 
       const customer = customers.find((c) => c.id === customerId) || null
@@ -239,9 +240,10 @@ window.__ModuleLoader__.load({
 
       async function load() {
         try {
-          const [s, cs, tpl, qs] = await Promise.all([
-            api('status'), api('customers'), api('templates'), api('quotes'),
+          const [s, cs, tpl, qs, sp] = await Promise.all([
+            api('status'), api('customers'), api('templates'), api('quotes'), api('skill_prompt').catch(() => ({ prompt: '' })),
           ])
+          if (sp && sp.prompt) setOppPrompt(sp.prompt)
           setStatus(s); setCustomers(cs.items || [])
           setTemplates(tpl.items || [])
           setQuotes(qs.items || [])
@@ -362,11 +364,12 @@ window.__ModuleLoader__.load({
       }
 
       async function newOppChat() {
+        const prompt = oppPrompt || FALLBACK_OPP_PROMPT
         const svc = getSvc('uiWorkspace')
         const sessions = getSvc('sessions')
         const lay = getSvc('layout')
         const copyPrompt = () => {
-          try { navigator.clipboard.writeText(NEW_OPP_PROMPT) } catch { /* ignore */ }
+          try { navigator.clipboard.writeText(prompt) } catch { /* ignore */ }
           setChatNotice('已把「新建商机」提示词复制到剪贴板：请点左上角「新建会话」后直接粘贴发送。')
         }
         if (!svc && !sessions) { setChatNotice('当前拿不到会话服务。已复制提示词，请手动新建会话粘贴。'); copyPrompt(); return }
@@ -378,7 +381,7 @@ window.__ModuleLoader__.load({
               if (svc && typeof svc.openSession === 'function') svc.openSession(id)
               if (lay && typeof lay.selectPanel === 'function') lay.selectPanel(null)
               await sessions.using(id, { source: 'controllerOperation' }, async (ref) => {
-                await ref.binding.session.prompt([{ type: 'text', text: NEW_OPP_PROMPT }], 'queue')
+                await ref.binding.session.prompt([{ type: 'text', text: prompt }], 'queue')
               })
               setChatNotice('已新建会话并发送「新建商机」提示；直接补充客户和金额即可。')
               return
@@ -396,7 +399,7 @@ window.__ModuleLoader__.load({
           }
           if (newId && sessions && typeof sessions.using === 'function') {
             await sessions.using(newId, { source: 'controllerOperation' }, async (ref) => {
-              await ref.binding.session.prompt([{ type: 'text', text: NEW_OPP_PROMPT }], 'queue')
+              await ref.binding.session.prompt([{ type: 'text', text: prompt }], 'queue')
             })
             setChatNotice('已新建会话并发送「新建商机」提示；直接补充客户和金额即可。')
           } else {
@@ -405,7 +408,7 @@ window.__ModuleLoader__.load({
           }
         } catch (e) {
           setChatNotice('新建会话失败：' + String(e.message || e) + '（已复制提示词，可手动新建会话粘贴）')
-          try { navigator.clipboard.writeText(NEW_OPP_PROMPT) } catch { /* ignore */ }
+          try { navigator.clipboard.writeText(prompt) } catch { /* ignore */ }
         }
       }
 
