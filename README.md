@@ -99,3 +99,11 @@ dsh plugin --profile desktop add /Users/liangli/Documents/deepseek-harness/defau
 
 - 面板「新建商机（对话）」提示词改为由 `lib/skill.js` 的 `NEW_OPP_PROMPT` 统一提供（面板通过 `/presales/api/skill_prompt` 拉取），技能内容与按钮不再两处维护。
 - 复杂解决方案模板按《信云智联·AI产品线报价管理系统》样例重建（11 列 + 每节小计 + 版本/审核状态/交付周期）。
+
+
+## v0.9.1 · 本地一次性模板
+
+- 报价 tab 新增「选择本地模板（一次性）」：选一个本地 xlsx，只在本机临时保存（`~/.dsh/presales-local-templates/`），**不写入 报价模板.dbt**；
+- 生成报价时复制该模板、按 `{{...}}` 占位符填充，输出到 `~/.dsh/presales-out/quotes/`，面板提供下载链接；
+- 明细占位：一行中只要有 `{{序号}}` 或 `{{产品名称}}` 即算一个明细槽位，多行就复制多行占位行；
+- 不选本地模板时仍使用知识库内置/已登记的模板。

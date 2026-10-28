@@ -230,6 +230,8 @@ window.__ModuleLoader__.load({
       const [lastQuote, setLastQuote] = React.useState(null)
       const [updates, setUpdates] = React.useState(null)
       const [updatesOpen, setUpdatesOpen] = React.useState(false)
+      const [localTpl, setLocalTpl] = React.useState(null)
+      const fileRef = React.useRef(null)
       const [updating, setUpdating] = React.useState('')
       const [chatNotice, setChatNotice] = React.useState('')
       const [oppPrompt, setOppPrompt] = React.useState('')
@@ -309,6 +311,8 @@ window.__ModuleLoader__.load({
             body: JSON.stringify({
               customerName: customer.name, customerNo: customer.code || '',
               opportunityNo: opp ? opp.no : '', template,
+              localTemplateId: localTpl ? localTpl.id : '',
+              localTemplateName: localTpl ? localTpl.name : '',
               items: cart.map((x) => ({ code: x.code, qty: Number(x.qty) || 0, discount: Number(x.discount) || 1 })),
             }),
           })
@@ -362,6 +366,22 @@ window.__ModuleLoader__.load({
         if (name === 'uiWorkspace') return uiWorkspace
         if (name === 'layout') return uiLayout
         return null
+      }
+
+      async function pickLocalTemplate(file) {
+        if (!file) return
+        setBusy(true); setMsg(null)
+        try {
+          const buf = await file.arrayBuffer()
+          let binary = ''
+          const bytes = new Uint8Array(buf)
+          const chunk = 0x8000
+          for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk))
+          const data = btoa(binary)
+          const r = await api('template_local', { method: 'POST', body: JSON.stringify({ name: file.name, data }) })
+          setLocalTpl({ id: r.id, name: r.name })
+          setMsg({ kind: 'ok', text: `已载入本地模板：${r.name}（仅本次使用，不写入 WPS）` })
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setBusy(false); if (fileRef.current) fileRef.current.value = '' }
       }
 
       async function scanTemplates() {
@@ -475,8 +495,10 @@ window.__ModuleLoader__.load({
               className: 'presales-select', value: template, onChange: (e) => setTemplate(e.target.value),
             }, templates.map((t) => h('option', { key: t.name, value: t.name }, `${t.name}${t.default ? '（默认）' : ''}`)))))),
           h('div', { className: 'presales-row', style: { marginTop: 8 } },
-            h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void scanTemplates() }, '扫描新模板'),
-            h('span', { className: 'presales-muted' }, '把自定义 xlsx 放进「报价管理/报价模板/」后点扫描；模板里用 {{...}} 占位')),
+            h('input', { ref: fileRef, type: 'file', accept: '.xlsx', style: { display: 'none' }, onChange: (e) => void pickLocalTemplate(e.target.files && e.target.files[0]) }),
+            h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => fileRef.current && fileRef.current.click() }, '选择本地模板（一次性）'),
+            localTpl ? h('span', { className: 'presales-muted' }, `已选：${localTpl.name}`) : h('span', { className: 'presales-muted' }, '自定义 xlsx 仅本次使用，不写入 WPS'),
+            localTpl ? h('button', { className: 'presales-btn', type: 'button', onClick: () => setLocalTpl(null) }, '清除') : null),
         h('section', { className: 'presales-card' },
           h('div', { className: 'presales-row' },
             h('input', {

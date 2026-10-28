@@ -31,6 +31,7 @@ import {
 import { resolveTables } from './lib/tables.js'
 import { buildQuoteLayout } from './lib/xlsx-layout.js'
 import { PRESALES_SKILL, NEW_OPP_PROMPT } from './lib/skill.js'
+import * as XLSX from 'xlsx'
 
 export const name = 'presales'
 export const inject = ['tools']
@@ -1012,6 +1013,88 @@ export function apply(ctx, rawConfig = {}) {
     return renderQuoteXlsx(dto, meta)
   }
 
+  // ── 本地一次性模板（不入库） ────────────────────────────────
+  function localTemplateDir() {
+    const base = process.env.DSH_PROFILE_DIR || path.join(homedir(), '.dsh')
+    return path.join(base, 'presales-local-templates')
+  }
+
+  async function saveLocalTemplate({ name, data }) {
+    if (!data) throw new Error('缺少模板内容')
+    const dir = localTemplateDir()
+    await mkdir(dir, { recursive: true })
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    await writeFile(path.join(dir, `${id}.xlsx`), Buffer.from(String(data), 'base64'))
+    return { id, name: String(name || '本地模板.xlsx') }
+  }
+
+  function tokenMap(dto, meta) {
+    return {
+      '{{项目名称}}': dto.customerName || meta.customerName || '',
+      '{{客户名称}}': dto.customerName || meta.customerName || '',
+      '{{报价单号}}': meta.quoteNo || '',
+      '{{报价日期}}': meta.date || today(),
+      '{{报价人}}': meta.sales || '',
+      '{{报价版本}}': meta.version || 'V1',
+      '{{含税合计}}': dto.totals?.grossTotal ?? '',
+      '{{未税合计}}': dto.totals?.untaxedTotal ?? '',
+      '{{税额合计}}': dto.totals?.taxTotal ?? '',
+      '{{方案概述}}': meta.notes || '',
+      '{{服务内容}}': meta.service || '',
+      '{{售后保障}}': meta.warranty || '',
+      '{{报价说明}}': meta.notes || '',
+    }
+  }
+
+  function fillLocalSheet(ws, dto, meta) {
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:K40')
+    const slots = []
+    for (let r = range.s.r; r <= range.e.r; r += 1) {
+      for (let c = range.s.c; c <= range.e.c; c += 1) {
+        const cell = ws[XLSX.utils.encode_cell({ r, c })]
+        const t = cell && typeof cell.v === 'string' ? cell.v : ''
+        if (t.includes('{{序号}}') || t.includes('{{产品名称}}')) { slots.push(r); break }
+      }
+    }
+    const slotIndex = new Map(slots.map((r, i) => [r, i]))
+    const scalar = tokenMap(dto, meta)
+    const items = dto.lines || []
+    for (let r = range.s.r; r <= range.e.r; r += 1) {
+      for (let c = range.s.c; c <= range.e.c; c += 1) {
+        const addr = XLSX.utils.encode_cell({ r, c })
+        const cell = ws[addr]
+        if (!cell || typeof cell.v !== 'string' || !cell.v.includes('{{')) continue
+        let value = cell.v
+        if (slotIndex.has(r)) {
+          const item = items[slotIndex.get(r)]
+          const detail = {
+            '{{序号}}': item?.lineNo ?? '', '{{产品类型}}': item?.category || '', '{{产品名称}}': item?.name || '',
+            '{{规格}}': item?.spec || '', '{{品牌}}': item?.brand || '', '{{型号}}': item?.model || '',
+            '{{单价}}': item?.grossUnit ?? '', '{{单位}}': item?.unit || '', '{{数量}}': item?.qty ?? '',
+            '{{总价}}': item?.grossSubtotal ?? '', '{{税率}}': item ? `${(Number(item.taxRate) * 100).toFixed(0)}%` : '',
+            '{{备注}}': item?.remark || '',
+          }
+          value = value.replace(/\{\{[^{}]+\}\}/g, (m) => (detail[m] === undefined ? '' : String(detail[m])))
+        } else {
+          value = value.replace(/\{\{[^{}]+\}\}/g, (m) => (scalar[m] === undefined ? '' : String(scalar[m])))
+        }
+        cell.v = value
+        cell.t = 's'
+      }
+    }
+  }
+
+  async function renderLocalTemplate(dto, meta, localId) {
+    const wb = XLSX.readFile(path.join(localTemplateDir(), `${localId}.xlsx`))
+    for (const name of wb.SheetNames) fillLocalSheet(wb.Sheets[name], dto, meta)
+    const outDir = path.resolve(config.outputDir || path.join(homedir(), '.dsh', 'presales-out', 'quotes'))
+    await mkdir(outDir, { recursive: true })
+    const fileName = `${meta.quoteNo || 'DRAFT'}_${String(dto.customerName || '').replace(/[\\/:*?"<>|]/g, '_').slice(0, 30)}_报价单.xlsx`
+    const outFile = path.join(outDir, fileName)
+    XLSX.writeFile(wb, outFile)
+    return { filePath: outFile, fileName, link: `/presales/api/download?f=${encodeURIComponent(fileName)}` }
+  }
+
   async function loadQuoteDto(quoteNo) {
     const [quotes, versions, items] = await Promise.all([list('quotes'), list('quoteVersions'), list('quoteItems')])
     const q = quotes.find((x) => x['报价单号'] === quoteNo)
@@ -1279,8 +1362,21 @@ export function apply(ctx, rawConfig = {}) {
             await updateRecord('opportunities', r._id, { '最后跟进时间': d })
             return json(res, 200, { ok: true })
           }
-          if (route === 'template_scan') {
-            try { return json(res, 200, { ok: true, ...(await scanTemplates()) }) } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          if (route === 'template_local' && req.method === 'POST') {
+            try {
+              const body = await readBody(req)
+              return json(res, 200, { ok: true, ...(await saveLocalTemplate(body)) })
+            } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'download') {
+            const name = url.searchParams.get('f') || ''
+            const file = path.join(path.resolve(config.outputDir || path.join(homedir(), '.dsh', 'presales-out', 'quotes')), path.basename(name))
+            try {
+              const buf = await readFile(file)
+              res.writeHead(200, { 'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(path.basename(file))}` })
+              res.end(buf)
+            } catch { res.writeHead(404).end('not found') }
+            return
           }
           if (route === 'skill_prompt') {
             return json(res, 200, { ok: true, prompt: NEW_OPP_PROMPT })
@@ -1381,9 +1477,14 @@ export function apply(ctx, rawConfig = {}) {
             const out = await persistQuote(dto, { template: body.template })
             let rendered = null
             try {
-              rendered = await renderByTemplate(dto, { quoteNo: out.quoteNo, version: 'V1', date: today(), customerName: dto.customerName, validUntil: '' }, body.template)
-              if (rendered?.link && out.quoteId) await updateRecord('quotes', out.quoteId, { '文件链接': rendered.link })
-              await registerDocument({ quoteNo: out.quoteNo, version: 'V1', customerName: dto.customerName, opportunityNo: dto.opportunityNo, opportunityName: dto.opportunityName, fileName: rendered?.name, link: rendered?.link })
+              if (body.localTemplateId) {
+                rendered = await renderLocalTemplate(dto, { quoteNo: out.quoteNo, version: 'V1', date: today(), customerName: dto.customerName }, body.localTemplateId)
+                if (out.quoteId) await updateRecord('quotes', out.quoteId, { '文件链接': rendered.link })
+              } else {
+                rendered = await renderByTemplate(dto, { quoteNo: out.quoteNo, version: 'V1', date: today(), customerName: dto.customerName, validUntil: '' }, body.template)
+                if (rendered?.link && out.quoteId) await updateRecord('quotes', out.quoteId, { '文件链接': rendered.link })
+                await registerDocument({ quoteNo: out.quoteNo, version: 'V1', customerName: dto.customerName, opportunityNo: dto.opportunityNo, opportunityName: dto.opportunityName, fileName: rendered?.name, link: rendered?.link })
+              }
             } catch { /* 出单失败不影响落库 */ }
             return json(res, 200, { ok: true, ...out, link: rendered?.link || '', fileName: rendered?.name || '' })
           }
