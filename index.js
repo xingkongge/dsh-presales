@@ -30,6 +30,7 @@ import {
 } from './lib/pricing.js'
 import { resolveTables } from './lib/tables.js'
 import { buildQuoteLayout } from './lib/xlsx-layout.js'
+import { PRESALES_SKILL } from './lib/skill.js'
 
 export const name = 'presales'
 export const inject = ['tools']
@@ -79,6 +80,7 @@ export function apply(ctx, rawConfig = {}) {
       } catch { /* 静默 */ }
     }
     const timer = setInterval(tick, 10 * 60 * 1000)
+    timer.unref?.()
     setTimeout(tick, 30 * 1000).unref?.()
     return () => clearInterval(timer)
   })
@@ -926,6 +928,26 @@ export function apply(ctx, rawConfig = {}) {
       meta: { quoteNo, customerName: q['客户名称'] || '', date: today(), sales: '', validUntil: vs?.['有效期至'] || '' },
     }
   }
+
+  // ── 技能：把商机/报价规则注册进会话目录 ────────────────────
+  function registerPresalesSkill() {
+    let skills = null
+    try { skills = typeof ctx.get === 'function' ? ctx.get('skills') : ctx.skills } catch { skills = null }
+    if (!skills || typeof skills.register !== 'function') return
+    const skill = {
+      name: 'digital-presales',
+      description: '数字售前：商机新建/推进/跟进，报价计价/模块拆行/V2/Excel 出单，以及 WPS 数据联动规则。',
+      whenToUse: '用户提到商机、推进阶段、跟进、报价、报价单、V2、出单，或要求在数字售前面板里操作时。',
+      content: PRESALES_SKILL,
+      invocation: { modelInvocable: true, userInvocable: true },
+      resourceBase: { kind: 'opaque', description: '内置在 @cnbm/dsh-presales 插件中' },
+    }
+    try {
+      if (typeof ctx.effect === 'function') ctx.effect(() => skills.register(skill))
+      else skills.register(skill)
+    } catch { /* 技能注册失败不影响工具 */ }
+  }
+  registerPresalesSkill()
 
   // ── Web 面板接口（同源，带自定义头） ──────────────────────
   async function persistQuote(dto, opts = {}) {

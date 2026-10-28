@@ -82,3 +82,14 @@ dsh plugin --profile desktop add /Users/liangli/Documents/deepseek-harness/defau
 - tab 顺序：**商机 → 报价**，默认打开商机；
 - 商机 tab 右上「新建商机（对话）」：调用客户端 `uiWorkspace.startSession` 打开新会话，并把数字售前的新建商机提示词预填到输入框；
 - 提示词包含客户/名称/金额/阶段/落单时间/联系人/行业/简介的填写说明，发送后 Agent 会先 `opp_list` 查重再 `opp_create`。
+
+
+## 内置技能 `digital-presales`
+
+插件启动时会用 `ctx.skills.register` 注册技能 **digital-presales**（runtime provider）：
+
+- 商机 11 阶段、新建流程（只校验连接、不比对样例、自然语言引导）；
+- 报价口径、模块拆行、拦截规则、V2、文档产物登记；
+- WPS 联动与授权边界。
+
+内容维护在 `lib/skill.js`（改完发版即可，所有会话自动可见）。
