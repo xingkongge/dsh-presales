@@ -1199,14 +1199,43 @@ export function apply(ctx, rawConfig = {}) {
     try { return JSON.parse(await readFile(path.join(dir, 'node_modules', pkg, 'package.json'), 'utf8')).version } catch { return '' }
   }
 
+  const GH_MIRRORS = ['', 'https://ghproxy.net/', 'https://gh-proxy.com/', 'https://ghfast.top/']
+
+  async function fetchWithTimeout(url, options = {}, timeout = 20000) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), timeout)
+    try { return await fetch(url, { ...options, signal: ctrl.signal }) } finally { clearTimeout(timer) }
+  }
+
   async function ghLatest(repo) {
-    const headers = { 'user-agent': 'dsh-presales-updater', accept: 'application/vnd.github+json' }
-    if (config.githubToken) headers.authorization = `Bearer ${config.githubToken}`
-    const r = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, { headers })
-    if (!r.ok) throw new Error(`GitHub ${r.status}`)
-    const d = await r.json()
-    const asset = (d.assets || []).find((a) => String(a.name).endsWith('.tgz'))
-    return { tag: d.tag_name, published: d.published_at, asset: asset ? { name: asset.name, url: asset.browser_download_url } : null }
+    try {
+      const headers = { 'user-agent': 'dsh-presales-updater', accept: 'application/vnd.github+json' }
+      if (config.githubToken) headers.authorization = `Bearer ${config.githubToken}`
+      const r = await fetchWithTimeout(`https://api.github.com/repos/${repo}/releases/latest`, { headers })
+      if (!r.ok) throw new Error(`GitHub ${r.status}`)
+      const d = await r.json()
+      const asset = (d.assets || []).find((a) => String(a.name).endsWith('.tgz'))
+      return { tag: d.tag_name, published: d.published_at, asset: asset ? { name: asset.name, url: asset.browser_download_url } : null }
+    } catch (error) {
+      const pkgName = repo.endsWith('presales') ? 'cnbm-dsh-presales' : 'cnbm-dsh-wps365'
+      const r = await fetchWithTimeout(`https://cdn.jsdelivr.net/gh/${repo}@latest/package.json`, {})
+      if (!r.ok) throw new Error(`GitHub 与 jsDelivr 均不可达：${error.message || error}`)
+      const pkg = await r.json()
+      const tag = `v${pkg.version}`
+      return { tag, published: '', asset: { name: `${pkgName}-${pkg.version}.tgz`, url: `https://github.com/${repo}/releases/download/${tag}/${pkgName}-${pkg.version}.tgz` } }
+    }
+  }
+
+  async function downloadAsset(url) {
+    let lastError = null
+    for (const prefix of GH_MIRRORS) {
+      try {
+        const res = await fetchWithTimeout(prefix + url, { headers: { 'user-agent': 'dsh-presales-updater' } }, 60000)
+        if (res.ok) return Buffer.from(await res.arrayBuffer())
+        lastError = new Error(`HTTP ${res.status}`)
+      } catch (e) { lastError = e }
+    }
+    throw new Error(`下载更新失败（GitHub 及镜像均不可达）：${lastError && lastError.message ? lastError.message : lastError}`)
   }
 
   async function checkUpdates() {
@@ -1229,10 +1258,8 @@ export function apply(ctx, rawConfig = {}) {
     if (!repo) throw new Error(`未配置 ${key} 的仓库`)
     const latest = await ghLatest(repo)
     if (!latest.asset) throw new Error('该 Release 没有 tgz 资产')
-    const res = await fetch(latest.asset.url, { headers: { 'user-agent': 'dsh-presales-updater' } })
-    if (!res.ok) throw new Error(`下载失败 ${res.status}`)
     const file = path.join(tmpdir(), latest.asset.name)
-    await writeFile(file, Buffer.from(await res.arrayBuffer()))
+    await writeFile(file, await downloadAsset(latest.asset.url))
     const profile = process.env.DSH_PROFILE || 'desktop'
     const candidates = [process.env.DSH_CLI, 'dsh', '/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh'].filter(Boolean)
     let lastError = null
