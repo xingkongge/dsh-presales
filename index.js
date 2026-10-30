@@ -1417,11 +1417,32 @@ export function apply(ctx, rawConfig = {}) {
               id: r._id, no: r['商机编号'] || '', name: r['商机名称'] || '', stage: r['阶段'] || '', amount: r['预计金额'] || null,
             })) })
           }
+          if (route === 'categories') {
+            const cats = await list('productCategories')
+            const catalog = await loadCatalog()
+            const countL1 = new Map(); const countL2 = new Map()
+            for (const p of catalog) {
+              countL1.set(p.l1, (countL1.get(p.l1) || 0) + 1)
+              const key = `${p.l1}||${p.l2}`; countL2.set(key, (countL2.get(key) || 0) + 1)
+            }
+            const norm = (v) => Array.isArray(v) ? v : (v ? [v] : [])
+            const ones = cats.filter((c) => c['层级'] === '一级')
+            const tree = ones.map((c) => ({
+              id: c._id, name: c['分类名称'], count: countL1.get(c['分类名称']) || 0,
+              children: cats.filter((x) => x['层级'] === '二级' && norm(x['父记录']).includes(c._id))
+                .map((x) => ({ id: x._id, name: x['分类名称'], count: countL2.get(`${c['分类名称']}||${x['分类名称']}`) || 0 })),
+            }))
+            return json(res, 200, { ok: true, tree })
+          }
           if (route === 'products') {
             const kw = String(url.searchParams.get('keyword') || '').toLowerCase()
+            const l1 = String(url.searchParams.get('l1') || '')
+            const l2 = String(url.searchParams.get('l2') || '')
             const limit = Math.min(Number(url.searchParams.get('limit')) || 20, 50)
             const catalog = await loadCatalog()
             let rows = catalog.filter((p) => isQuotable(p))
+            if (l1) rows = rows.filter((p) => p.l1 === l1)
+            if (l2) rows = rows.filter((p) => p.l2 === l2)
             if (kw) rows = rows.filter((p) => `${p.code} ${p.name} ${p.brand} ${p.model} ${p.l2}`.toLowerCase().includes(kw))
             return json(res, 200, { ok: true, items: rows.slice(0, limit).map((p) => ({
               code: p.code, name: p.name, unit: p.unit, stdPrice: p.stdPrice, costPrice: p.costPrice,

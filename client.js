@@ -52,6 +52,12 @@ window.__ModuleLoader__.load({
 .presales-badge.warn{color:var(--dsw-alias-state-warn-primary)}
 .presales-quotes{list-style:none;margin:0;padding:0}
 .presales-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#e5484d;margin-left:4px;vertical-align:middle}
+.presales-tree{display:flex;flex-direction:column;gap:4px;margin-top:8px;max-height:260px;overflow:auto}
+.presales-tree-l1{display:flex;align-items:center;gap:6px;background:none;border:0;color:var(--dsw-alias-label-primary);cursor:pointer;padding:4px 2px;font-size:13px;text-align:left}
+.presales-tree-l1.active{color:var(--dsw-alias-brand-primary);font-weight:600}
+.presales-tree-l2{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 6px 18px}
+.presales-tree-l2 button{background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:var(--dsw-alias-label-secondary)}
+.presales-tree-l2 button.active{border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-brand-primary)}
 .presales-tabs{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--dsw-alias-border-l1);padding-bottom:8px}
 .presales-tab{padding:6px 14px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;font-size:13px}
 .presales-tab[aria-selected="true"]{background:var(--dsw-alias-bg-layer-1);border-color:var(--dsw-alias-border-l1);color:var(--dsw-alias-label-primary);font-weight:600}
@@ -226,6 +232,9 @@ window.__ModuleLoader__.load({
       const [template, setTemplate] = React.useState('')
       const [keyword, setKeyword] = React.useState('')
       const [results, setResults] = React.useState([])
+      const [cats, setCats] = React.useState([])
+      const [cat, setCat] = React.useState({ l1: '', l2: '' })
+      const [expanded, setExpanded] = React.useState({})
       const [cart, setCart] = React.useState([])
       const [busy, setBusy] = React.useState(false)
       const [lastQuote, setLastQuote] = React.useState(null)
@@ -244,9 +253,10 @@ window.__ModuleLoader__.load({
 
       async function load() {
         try {
-          const [s, cs, tpl, qs, sp] = await Promise.all([
-            api('status'), api('customers'), api('templates'), api('quotes'), api('skill_prompt').catch(() => ({ prompt: '' })),
+          const [s, cs, tpl, qs, sp, ct] = await Promise.all([
+            api('status'), api('customers'), api('templates'), api('quotes'), api('skill_prompt').catch(() => ({ prompt: '' })), api('categories').catch(() => ({ tree: [] })),
           ])
+          setCats(ct.tree || [])
           if (sp && sp.prompt) setOppPrompt(sp.prompt)
           setStatus(s); setCustomers(cs.items || [])
           setTemplates(tpl.items || [])
@@ -266,14 +276,24 @@ window.__ModuleLoader__.load({
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
 
-      async function search() {
+      async function search(filter = cat) {
         if (busy) return
         setBusy(true); setMsg(null)
         try {
-          const r = await api('products?keyword=' + encodeURIComponent(keyword) + '&limit=20')
+          const qs = new URLSearchParams({ limit: '20' })
+          if (keyword) qs.set('keyword', keyword)
+          if (filter && filter.l1) qs.set('l1', filter.l1)
+          if (filter && filter.l2) qs.set('l2', filter.l2)
+          const r = await api('products?' + qs.toString())
           setResults(r.items || [])
-          if (!(r.items || []).length) setMsg({ kind: 'err', text: '没有匹配的在售产品' })
+          if (!(r.items || []).length) setMsg({ kind: 'err', text: '该分类/关键字下没有在售产品' })
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setBusy(false) }
+      }
+
+      function pickCat(l1, l2) {
+        const next = { l1, l2 }
+        setCat(next)
+        void search(next)
       }
 
       function add(p) {
@@ -500,6 +520,28 @@ window.__ModuleLoader__.load({
             h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => fileRef.current && fileRef.current.click() }, '选择本地模板（一次性）'),
             localTpl ? h('span', { className: 'presales-muted' }, `已选：${localTpl.name}`) : h('span', { className: 'presales-muted' }, '自定义 xlsx 仅本次使用，不写入 WPS'),
             localTpl ? h('button', { className: 'presales-btn', type: 'button', onClick: () => setLocalTpl(null) }, '清除') : null),
+        h('section', { className: 'presales-card' },
+          h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+            h('b', null, '产品分类'),
+            cat.l1 ? h('button', { className: 'presales-btn', type: 'button', onClick: () => pickCat('', '') }, '全部') : h('span', { className: 'presales-muted' }, '点击分类筛选，或直接搜关键字')),
+          h('div', { className: 'presales-tree' },
+            cats.map((one) => h('div', { key: one.id },
+              h('button', {
+                className: 'presales-tree-l1' + (cat.l1 === one.name && !cat.l2 ? ' active' : ''),
+                type: 'button',
+                onClick: () => {
+                  setExpanded((prev) => ({ ...prev, [one.id]: !prev[one.id] }))
+                  pickCat(one.name, '')
+                },
+              }, h('span', null, expanded[one.id] ? '▾' : '▸'), one.name, h('span', { className: 'presales-muted' }, ` (${one.count})`)),
+              expanded[one.id] ? h('div', { className: 'presales-tree-l2' },
+                one.children.map((two) => h('button', {
+                  key: two.id,
+                  type: 'button',
+                  className: cat.l2 === two.name ? 'active' : '',
+                  onClick: () => pickCat(one.name, two.name),
+                }, `${two.name} (${two.count})`))) : null))),
+          !cats.length ? h('div', { className: 'presales-muted' }, '分类加载中…') : null),
         h('section', { className: 'presales-card' },
           h('div', { className: 'presales-row' },
             h('input', {
