@@ -932,6 +932,17 @@ export function apply(ctx, rawConfig = {}) {
     return { added, total: items.filter((x) => /\.xlsx$/i.test(x.name)).length }
   }
 
+  async function templateHasTokens(fileId) {
+    try {
+      const cli = await cliOk()
+      const sheets = await runCli(cli, ['api', 'get', `/v7/sheets/${fileId}/worksheets`, '-o', 'json'])
+      const sid = sheets.json?.data?.sheets?.[0]?.sheet_id
+      if (!sid) return false
+      const rng = await runCli(cli, ['api', 'get', `/v7/sheets/${fileId}/worksheets/${sid}/range_data`, '--query', 'row_from=0', '--query', 'row_to=80', '--query', 'col_from=0', '--query', 'col_to=20', '-o', 'json'])
+      return (rng.json?.data?.range_data || []).some((c) => String(c.cell_text || '').includes('{{'))
+    } catch { return false }
+  }
+
   async function copyTemplateAndFill(tpl, dto, meta) {
     const folderNode = await ensureRenderFolder()
     const cli = await cliOk()
@@ -989,9 +1000,11 @@ export function apply(ctx, rawConfig = {}) {
         if (!item) continue
         const map = {
           '{{序号}}': item.lineNo, '{{产品类型}}': item.category || '', '{{产品名称}}': item.name,
-          '{{规格}}': item.spec || '', '{{品牌}}': item.brand || '', '{{型号}}': item.model || '',
+          '{{产品名称/规格描述}}': item.name, '{{规格}}': item.spec || '', '{{规格描述}}': item.spec || '',
+          '{{模块名称}}': item.module || '', '{{品牌}}': item.brand || '', '{{型号}}': item.model || '',
           '{{单价}}': item.grossUnit, '{{单位}}': item.unit || '', '{{数量}}': item.qty,
-          '{{总价}}': item.grossSubtotal, '{{税率}}': `${(Number(item.taxRate) * 100).toFixed(0)}%`, '{{备注}}': item.remark || '',
+          '{{总价}}': item.grossSubtotal, '{{含税单价}}': item.grossUnit,
+          '{{税率}}': `${(Number(item.taxRate) * 100).toFixed(0)}%`, '{{备注}}': item.remark || '',
         }
         value = t.replace(/\{\{[^{}]+\}\}/g, (m) => (map[m] === undefined ? '' : String(map[m])))
       } else {
@@ -1008,7 +1021,13 @@ export function apply(ctx, rawConfig = {}) {
   async function renderByTemplate(dto, meta, tplName) {
     try {
       const tpl = (await list('quoteTemplates')).find((t) => t['模板名称'] === tplName)
-      if (tpl && tpl['模板类型'] === '自定义' && tpl['文件ID']) return await copyTemplateAndFill(tpl, dto, meta)
+      if (tpl && tpl['文件ID'] && tpl['启用状态'] !== '停用') {
+        // 模板里有 {{...}} 占位符才按模板复制填充；纯版式模板继续走内置渲染
+        if (await templateHasTokens(tpl['文件ID'])) {
+          const filled = await copyTemplateAndFill(tpl, dto, meta)
+          if (filled) return filled
+        }
+      }
     } catch { /* 回退内置布局 */ }
     return renderQuoteXlsx(dto, meta)
   }
