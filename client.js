@@ -242,6 +242,8 @@ window.__ModuleLoader__.load({
       const [updatesOpen, setUpdatesOpen] = React.useState(false)
       const [localTpl, setLocalTpl] = React.useState(null)
       const [tplNotice, setTplNotice] = React.useState(null)
+      const [sections, setSections] = React.useState([])
+      const [section, setSection] = React.useState('')
       const fileRef = React.useRef(null)
       const [updating, setUpdating] = React.useState('')
       const [chatNotice, setChatNotice] = React.useState('')
@@ -268,6 +270,17 @@ window.__ModuleLoader__.load({
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
       React.useEffect(() => { void load(); void checkUpdates() }, [])
+      React.useEffect(() => {
+        if (!template) return
+        let alive = true
+        api('template_sections?template=' + encodeURIComponent(template)).then((r) => {
+          if (!alive) return
+          const list = r.sections || []
+          setSections(list)
+          setSection((prev) => (list.some((x) => x.title === prev) ? prev : (list[0]?.title || '产品报价')))
+        }).catch(() => {})
+        return () => { alive = false }
+      }, [template])
 
       async function loadOpps(cid) {
         setOpps([]); setOppId('')
@@ -298,21 +311,22 @@ window.__ModuleLoader__.load({
         void search(next)
       }
 
+      const itemKey = (x) => `${x.code}@@${x.section || ''}`
       function add(p) {
         setCart((prev) => {
-          const i = prev.findIndex((x) => x.code === p.code)
+          const i = prev.findIndex((x) => x.code === p.code && (x.section || '') === section)
           if (i >= 0) {
             const next = prev.slice()
             next[i] = { ...next[i], qty: next[i].qty + 1 }
             return next
           }
-          return [...prev, { ...p, qty: 1, discount: 1, taxRate: p.taxRate || 0.13 }]
+          return [...prev, { ...p, qty: 1, discount: 1, taxRate: p.taxRate || 0.13, section }]
         })
       }
-      function patch(code, key, value) {
-        setCart((prev) => prev.map((x) => x.code === code ? { ...x, [key]: value } : x))
+      function patch(key, field, value) {
+        setCart((prev) => prev.map((x) => itemKey(x) === key ? { ...x, [field]: value } : x))
       }
-      function remove(code) { setCart((prev) => prev.filter((x) => x.code !== code)) }
+      function remove(key) { setCart((prev) => prev.filter((x) => itemKey(x) !== key)) }
 
       async function renderXlsx() {
         if (!lastQuote?.no) return
@@ -336,7 +350,7 @@ window.__ModuleLoader__.load({
               opportunityNo: opp ? opp.no : '', template,
               localTemplateId: localTpl ? localTpl.id : '',
               localTemplateName: localTpl ? localTpl.name : '',
-              items: cart.map((x) => ({ code: x.code, qty: Number(x.qty) || 0, discount: Number(x.discount) || 1 })),
+              items: cart.map((x) => ({ code: x.code, qty: Number(x.qty) || 0, discount: Number(x.discount) || 1, section: x.section || '' })),
             }),
           })
           setMsg({ kind: 'ok', text: `已生成 ${r.quoteNo}（含税 ${money(r.grossTotal)}）`, link: r.link || '' })
@@ -536,6 +550,11 @@ window.__ModuleLoader__.load({
             localTpl ? h('button', { className: 'presales-btn', type: 'button', onClick: () => setLocalTpl(null) }, '清除') : null),
         h('section', { className: 'presales-card' },
           h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+            h('b', null, '报价分节'),
+            sections.length ? h('select', { className: 'presales-select', style: { maxWidth: 280 }, value: section, onChange: (e) => setSection(e.target.value) },
+              sections.map((x) => h('option', { key: x.title, value: x.title }, x.title))) : h('span', { className: 'presales-muted' }, '模板未识别到分节，按“产品报价”输出')),
+          h('div', { className: 'presales-muted', style: { marginTop: 4 } }, '先选分节，再从下面挂产品；产品会记到当前分节'),
+          h('div', { className: 'presales-row', style: { justifyContent: 'space-between', marginTop: 10 } },
             h('b', null, '产品分类'),
             cat.l1 ? h('button', { className: 'presales-btn', type: 'button', onClick: () => pickCat('', '') }, '全部') : h('span', { className: 'presales-muted' }, '点击分类筛选，或直接搜关键字')),
           h('div', { className: 'presales-tree' },
@@ -571,18 +590,19 @@ window.__ModuleLoader__.load({
         cart.length ? h('section', { className: 'presales-card' },
           h('table', { className: 'presales-table' },
             h('thead', null, h('tr', null,
-              ['产品', '单位', '未税单价', '数量', '折扣', '含税小计', ''].map((t) => h('th', { key: t }, t)))),
+              ['产品', '分节', '单位', '未税单价', '数量', '折扣', '含税小计', ''].map((t) => h('th', { key: t }, t)))),
             h('tbody', null, cart.map((l) => {
               const unit = round(l.stdPrice * l.discount, 4)
               const gross = round(round(unit * l.qty, 2) * (1 + l.taxRate), 2)
-              return h('tr', { key: l.code },
+              return h('tr', { key: itemKey(l) },
                 h('td', null, l.name, h('div', { className: 'presales-muted' }, l.code)),
                 h('td', null, l.unit),
                 h('td', null, money(l.stdPrice)),
-                h('td', null, h('input', { type: 'number', min: 0, value: l.qty, onChange: (e) => patch(l.code, 'qty', Number(e.target.value)) })),
-                h('td', null, h('input', { type: 'number', min: 0.01, max: 1, step: 0.01, value: l.discount, onChange: (e) => patch(l.code, 'discount', Number(e.target.value)) })),
+                h('td', null, l.section || section || '-'),
+                h('td', null, h('input', { type: 'number', min: 0, value: l.qty, onChange: (e) => patch(itemKey(l), 'qty', Number(e.target.value)) })),
+                h('td', null, h('input', { type: 'number', min: 0.01, max: 1, step: 0.01, value: l.discount, onChange: (e) => patch(itemKey(l), 'discount', Number(e.target.value)) })),
                 h('td', null, money(gross)),
-                h('td', null, h('button', { className: 'presales-btn', type: 'button', onClick: () => remove(l.code) }, '移除')))
+                h('td', null, h('button', { className: 'presales-btn', type: 'button', onClick: () => remove(itemKey(l)) }, '移除')))
             }))),
           h('div', { className: 'presales-total', style: { marginTop: 12 } },
             h('span', null, '未税 ', h('b', null, money(totals.untaxed))),

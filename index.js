@@ -1115,6 +1115,30 @@ export function apply(ctx, rawConfig = {}) {
   }
 
   // ── 模板文件变更检测 ────────────────────────────────────────
+  async function templateSections(templateName) {
+    try {
+      const rec = (await list('quoteTemplates')).find((t) => t['模板名称'] === templateName)
+      const fileId = rec && rec['文件ID']
+      if (!fileId) return [{ title: '产品报价', row: null }]
+      const cli = await cliOk()
+      const sheets = await runCli(cli, ['api', 'get', `/v7/sheets/${fileId}/worksheets`, '-o', 'json'])
+      const sid = sheets.json?.data?.sheets?.[0]?.sheet_id
+      if (!sid) return [{ title: '产品报价', row: null }]
+      const rng = await runCli(cli, ['api', 'get', `/v7/sheets/${fileId}/worksheets/${sid}/range_data`, '--query', 'row_from=0', '--query', 'row_to=80', '--query', 'col_from=0', '--query', 'col_to=5', '-o', 'json'])
+      const cells = rng.json?.data?.range_data || []
+      const out = []
+      const seen = new Set()
+      for (const c of cells) {
+        const t = String(c.cell_text || '').trim()
+        if (!t || t.length > 30) continue
+        const isNum = /^[一二三四五六七八九十]+、/.test(t)
+        const isKeyword = /^(软件产品|硬件产品|实施及服务|实施服务|安装实施|运维服务|服务类?|产品报价)$/.test(t)
+        if ((isNum || isKeyword) && !seen.has(t)) { seen.add(t); out.push({ title: t, row: c.row_from }) }
+      }
+      return out.length ? out : [{ title: '产品报价', row: null }]
+    } catch { return [{ title: '产品报价', row: null }] }
+  }
+
   async function templateFiles() {
     const node = config.templateFolderNode || 'cuHskXQMMJkZ'
     const items = await wikiChildren(node)
@@ -1462,6 +1486,9 @@ export function apply(ctx, rawConfig = {}) {
             await updateRecord('opportunities', r._id, { '最后跟进时间': d })
             return json(res, 200, { ok: true })
           }
+          if (route === 'template_sections') {
+            try { return json(res, 200, { ok: true, sections: await templateSections(String(url.searchParams.get('template') || '')) }) } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
           if (route === 'template_check') {
             try { return json(res, 200, { ok: true, ...(await checkTemplateFiles()) }) } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
           }
@@ -1590,7 +1617,7 @@ export function apply(ctx, rawConfig = {}) {
               const p = found.product
               const qty = Number(it.qty) || 0
               const discount = Number(it.discount) || 1
-              const expanded = expandProduct(p, { qty, discount, modules: it.modules, section: '一、产品报价' })
+              const expanded = expandProduct(p, { qty, discount, modules: it.modules, section: it.section || '' })
               for (const e of expanded) {
                 for (const v of validateLine({ product: { ...p, name: e.name, stdPrice: e.stdPrice, costPrice: e.costPrice }, qty, discount, today: today() })) {
                   if (v.level === 'block') violations.push({ product: p.code, ...v })
