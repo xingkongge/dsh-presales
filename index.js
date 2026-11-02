@@ -1114,6 +1114,60 @@ export function apply(ctx, rawConfig = {}) {
     return { filePath: outFile, fileName, link: `/presales/api/download?f=${encodeURIComponent(fileName)}` }
   }
 
+  // ── 模板文件变更检测 ────────────────────────────────────────
+  async function templateFiles() {
+    const node = config.templateFolderNode || 'cuHskXQMMJkZ'
+    const items = await wikiChildren(node)
+    const cli = await cliOk()
+    const out = []
+    for (const it of items) {
+      if (it.type !== 'file' || !/\.xlsx$/i.test(it.name)) continue
+      const meta = await runCli(cli, ['api', 'get', `/v7/files/${it.id}/meta`, '-o', 'json'])
+      const real = meta.json?.data?.id
+      if (real) out.push({ name: it.name.replace(/\.xlsx$/i, ''), fileId: real, link: meta.json?.data?.link_url || '' })
+    }
+    return out
+  }
+
+  async function checkTemplateFiles() {
+    const files = await templateFiles()
+    const recs = await list('quoteTemplates')
+    const known = new Map(recs.filter((r) => r['文件ID']).map((r) => [r['文件ID'], r]))
+    const fileIds = new Set(files.map((f) => f.fileId))
+    const added = []
+    const updates = []
+    for (const f of files) {
+      if (known.has(f.fileId)) continue
+      const byName = recs.find((r) => r['模板名称'] === f.name)
+      if (byName) updates.push({ id: byName._id, name: f.name, fileId: f.fileId, link: f.link })
+      else added.push(f)
+    }
+    const missing = recs.filter((r) => r['文件ID'] && !fileIds.has(r['文件ID'])).map((r) => ({ id: r._id, name: r['模板名称'], fileId: r['文件ID'] }))
+    return { added, updates, missing, total: files.length }
+  }
+
+  async function syncTemplateFiles() {
+    const diff = await checkTemplateFiles()
+    let updated = 0; let created = 0; let disabled = 0
+    for (const u of diff.updates) {
+      await updateRecord('quoteTemplates', u.id, { '文件ID': u.fileId, '文件链接': u.link })
+      updated += 1
+    }
+    for (const a of diff.added) {
+      await create('quoteTemplates', [{
+        '模板名称': a.name, '模板类型': '自定义', '版本': 'V1', '启用状态': '启用', '默认模板': false,
+        '文件ID': a.fileId, '文件链接': a.link,
+        '占位符规范': '支持 {{项目名称}} {{客户名称}} {{报价单号}} {{报价日期}} {{报价人}} {{报价单号}} {{含税合计}}；明细行 {{序号}} {{产品类型}} {{产品名称}} {{品牌}} {{型号}} {{单价}} {{单位}} {{数量}} {{总价}} {{税率}} {{备注}}',
+      }])
+      created += 1
+    }
+    for (const m of diff.missing) {
+      await updateRecord('quoteTemplates', m.id, { '启用状态': '停用' })
+      disabled += 1
+    }
+    return { updated, created, disabled, ...(await checkTemplateFiles()) }
+  }
+
   async function loadQuoteDto(quoteNo) {
     const [quotes, versions, items] = await Promise.all([list('quotes'), list('quoteVersions'), list('quoteItems')])
     const q = quotes.find((x) => x['报价单号'] === quoteNo)
@@ -1407,6 +1461,12 @@ export function apply(ctx, rawConfig = {}) {
             }])
             await updateRecord('opportunities', r._id, { '最后跟进时间': d })
             return json(res, 200, { ok: true })
+          }
+          if (route === 'template_check') {
+            try { return json(res, 200, { ok: true, ...(await checkTemplateFiles()) }) } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'template_sync' && req.method === 'POST') {
+            try { return json(res, 200, { ok: true, ...(await syncTemplateFiles()) }) } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
           }
           if (route === 'template_local' && req.method === 'POST') {
             try {

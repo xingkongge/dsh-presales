@@ -241,6 +241,7 @@ window.__ModuleLoader__.load({
       const [updates, setUpdates] = React.useState(null)
       const [updatesOpen, setUpdatesOpen] = React.useState(false)
       const [localTpl, setLocalTpl] = React.useState(null)
+      const [tplNotice, setTplNotice] = React.useState(null)
       const fileRef = React.useRef(null)
       const [updating, setUpdating] = React.useState('')
       const [chatNotice, setChatNotice] = React.useState('')
@@ -253,10 +254,11 @@ window.__ModuleLoader__.load({
 
       async function load() {
         try {
-          const [s, cs, tpl, qs, sp, ct] = await Promise.all([
-            api('status'), api('customers'), api('templates'), api('quotes'), api('skill_prompt').catch(() => ({ prompt: '' })), api('categories').catch(() => ({ tree: [] })),
+          const [s, cs, tpl, qs, sp, ct, tc] = await Promise.all([
+            api('status'), api('customers'), api('templates'), api('quotes'), api('skill_prompt').catch(() => ({ prompt: '' })), api('categories').catch(() => ({ tree: [] })), api('template_check').catch(() => null),
           ])
           setCats(ct.tree || [])
+          setTplNotice(tc && (tc.added?.length || tc.updates?.length || tc.missing?.length) ? tc : null)
           if (sp && sp.prompt) setOppPrompt(sp.prompt)
           setStatus(s); setCustomers(cs.items || [])
           setTemplates(tpl.items || [])
@@ -389,6 +391,15 @@ window.__ModuleLoader__.load({
         return null
       }
 
+      async function syncTemplates() {
+        setBusy(true); setMsg(null)
+        try {
+          const r = await api('template_sync', { method: 'POST' })
+          setMsg({ kind: 'ok', text: `模板已同步：更新 ${r.updated || 0}、新增 ${r.created || 0}、停用 ${r.disabled || 0}` })
+          await load()
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setBusy(false) }
+      }
+
       async function pickLocalTemplate(file) {
         if (!file) return
         setBusy(true); setMsg(null)
@@ -515,6 +526,9 @@ window.__ModuleLoader__.load({
             h('label', null, h('span', { className: 'presales-label' }, '报价模板'), h('select', {
               className: 'presales-select', value: template, onChange: (e) => setTemplate(e.target.value),
             }, templates.map((t) => h('option', { key: t.name, value: t.name }, `${t.name}${t.default ? '（默认）' : ''}`)))))),
+          tplNotice ? h('div', { className: 'presales-row', style: { marginTop: 8, color: 'var(--dsw-alias-label-secondary)' } },
+            h('span', null, `模板文件有变化：新增 ${tplNotice.added?.length || 0} · 变更 ${tplNotice.updates?.length || 0} · 缺失 ${tplNotice.missing?.length || 0}`),
+            h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void syncTemplates() }, '同步模板记录')) : null,
           h('div', { className: 'presales-row', style: { marginTop: 8 } },
             h('input', { ref: fileRef, type: 'file', accept: '.xlsx', style: { display: 'none' }, onChange: (e) => void pickLocalTemplate(e.target.files && e.target.files[0]) }),
             h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => fileRef.current && fileRef.current.click() }, '选择本地模板（一次性）'),
