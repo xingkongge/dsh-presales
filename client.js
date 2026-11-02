@@ -29,7 +29,7 @@ window.__ModuleLoader__.load({
 .presales-grid{display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:10px}
 .presales-label{color:var(--dsw-alias-label-secondary);font-size:12px;display:block;margin-bottom:4px}
 .presales-input,.presales-select{box-sizing:border-box;width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:13px}
-.presales-btn{padding:6px 12px;border-radius:7px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);cursor:pointer;font-size:13px}
+.presales-btn{display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:7px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2,#2b2b2b);color:var(--dsw-alias-label-primary,#e8e8e8);cursor:pointer;font-size:13px;text-decoration:none;line-height:1.2}
 .presales-btn:hover{border-color:var(--dsw-alias-brand-primary)}
 .presales-btn.primary{background:var(--dsw-alias-brand-primary);color:var(--dsw-alias-label-invert,#fff);border-color:transparent;font-weight:600}
 .presales-btn[disabled]{opacity:.5;cursor:default}
@@ -255,6 +255,8 @@ window.__ModuleLoader__.load({
       const [mailFrom, setMailFrom] = React.useState(() => localStorage.getItem('presales.lastRfqFrom') || '')
       const [mailTo, setMailTo] = React.useState('')
       const [draftMsg, setDraftMsg] = React.useState('')
+      const [selected, setSelected] = React.useState({})
+      const [mailQueue, setMailQueue] = React.useState([])
       const fileRef = React.useRef(null)
       const [updating, setUpdating] = React.useState('')
       const [chatNotice, setChatNotice] = React.useState('')
@@ -377,6 +379,30 @@ window.__ModuleLoader__.load({
           }
           setMsg({ kind: 'ok', text: `已检查 ${r.checked || 0} 条询价，回填 ${updated.length} 条` })
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setBusy(false) }
+      }
+
+      function toggleSelect(key) {
+        setSelected((prev) => ({ ...prev, [key]: !prev[key] }))
+      }
+
+      async function batchMail() {
+        const lines = cart.filter((x) => x.temp && selected[itemKey(x)] && x.rfqId)
+        if (!lines.length) { setMsg({ kind: 'err', text: '请先勾选要询价的临时产品' }); return }
+        try {
+          const list = []
+          for (const l of lines) {
+            const m = await api('rfq_mail?id=' + encodeURIComponent(l.rfqId))
+            list.push({ ...m, lineKey: itemKey(l) })
+          }
+          if (!list.length) return
+          setMailPreview(list[0]); setMailQueue(list.slice(1)); setMailTo(list[0].to || ''); setDraftMsg('')
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+      }
+
+      function nextMail() {
+        if (!mailQueue.length) return
+        const [head, ...rest] = mailQueue
+        setMailPreview(head); setMailQueue(rest); setMailTo(head.to || ''); setDraftMsg('')
       }
 
       async function saveRfqDraft() {
@@ -644,7 +670,8 @@ window.__ModuleLoader__.load({
           h('div', { className: 'presales-muted', style: { marginTop: 4 } }, '先选分节，再从下面挂产品；产品会记到当前分节'),
           h('div', { className: 'presales-row', style: { marginTop: 8 } },
             h('button', { className: 'presales-btn', type: 'button', onClick: () => setTempOpen(!tempOpen) }, tempOpen ? '收起临时产品' : '新增临时产品（可暂估）'),
-            h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void syncRfqReplies() }, '同步询价回复')),
+            h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void syncRfqReplies() }, '同步询价回复'),
+            h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void batchMail() }, `生成选中询价邮件（${Object.values(selected).filter(Boolean).length}）`)),
           tempOpen ? h('div', { className: 'presales-card', style: { marginTop: 8 } },
             h('div', { className: 'presales-grid' },
               h('label', null, h('span', { className: 'presales-label' }, '名称'), h('input', { className: 'presales-input', value: tempForm.name, onChange: (e) => setTempForm({ ...tempForm, name: e.target.value }) })),
@@ -694,15 +721,16 @@ window.__ModuleLoader__.load({
         cart.length ? h('section', { className: 'presales-card' },
           h('table', { className: 'presales-table' },
             h('thead', null, h('tr', null,
-              ['产品', '分节', '单位', '未税单价', '数量', '折扣', '含税小计', ''].map((t) => h('th', { key: t }, t)))),
+              ['选', '产品', '分节', '单位', '未税单价', '数量', '折扣', '含税小计', ''].map((t) => h('th', { key: t }, t)))),
             h('tbody', null, cart.map((l) => {
               const unit = round(l.stdPrice * l.discount, 4)
               const gross = round(round(unit * l.qty, 2) * (1 + l.taxRate), 2)
               return h('tr', { key: itemKey(l) },
+                h('td', null, l.temp ? h('input', { type: 'checkbox', checked: Boolean(selected[itemKey(l)]), onChange: () => toggleSelect(itemKey(l)) }) : null),
                 h('td', null, l.name, l.temp ? h('span', { className: 'presales-badge' }, '临时') : null, h('div', { className: 'presales-muted' }, l.code)),
+                h('td', null, l.section || section || '-'),
                 h('td', null, l.unit),
                 h('td', null, l.temp ? h('input', { type: 'number', min: 0, value: l.stdPrice, onChange: (e) => patch(itemKey(l), 'stdPrice', Number(e.target.value)) }) : money(l.stdPrice)),
-                h('td', null, l.section || section || '-'),
                 h('td', null, h('input', { type: 'number', min: 0, value: l.qty, onChange: (e) => patch(itemKey(l), 'qty', Number(e.target.value)) })),
                 h('td', null, h('input', { type: 'number', min: 0.01, max: 1, step: 0.01, value: l.discount, onChange: (e) => patch(itemKey(l), 'discount', Number(e.target.value)) })),
                 h('td', null, money(gross)),
@@ -736,6 +764,7 @@ window.__ModuleLoader__.load({
           draftMsg ? h('div', { className: 'presales-muted', style: { marginTop: 6 } }, draftMsg) : null,
           h('div', { className: 'presales-row', style: { marginTop: 8 } },
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void saveRfqDraft() }, '存为邮件草稿（不发送）'),
+            mailQueue.length ? h('button', { className: 'presales-btn', type: 'button', onClick: () => nextMail() }, `下一封（剩 ${mailQueue.length}）`) : null,
             h('button', { className: 'presales-btn', type: 'button', onClick: () => { navigator.clipboard.writeText(`${mailPreview.subject}\n\n${mailPreview.text}`) } }, '复制主题+正文'),
             h('a', { className: 'presales-btn', href: `mailto:?subject=${encodeURIComponent(mailPreview.subject || '')}&body=${encodeURIComponent(mailPreview.text || '')}` }, '打开邮件客户端'))) : null,
         msg ? h('div', { className: `presales-msg ${msg.kind === 'ok' ? 'ok' : 'err'}` },
