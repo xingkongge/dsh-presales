@@ -297,7 +297,13 @@ window.__ModuleLoader__.load({
           if (def) setTemplate(def.name)
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
-      React.useEffect(() => { void load(); void checkUpdates() }, [])
+      React.useEffect(() => {
+        void load(); void checkUpdates()
+        // 打开面板时后台检查一次询价回复；有更新则刷新报价列表
+        api('rfq_sync', { method: 'POST', body: JSON.stringify({}) }).then((r) => {
+          if (r.updated && r.updated.length) void load()
+        }).catch(() => {})
+      }, [])
       React.useEffect(() => {
         api('email_accounts').then((r) => {
           const list = r.accounts || []
@@ -373,6 +379,21 @@ window.__ModuleLoader__.load({
         if (!line.rfqId) { setMsg({ kind: 'err', text: '这一行没有关联询价单' }); return }
         try { const m = await api('rfq_mail?id=' + encodeURIComponent(line.rfqId)); setMailPreview(m); setMailTo(m.to || ''); setDraftMsg('') }
         catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+      }
+
+      async function syncRfqReplies() {
+        setBusy(true); setMsg(null)
+        try {
+          const r = await api('rfq_sync', { method: 'POST', body: JSON.stringify({}) })
+          const updated = r.updated || []
+          if (updated.length) {
+            setCart((prev) => prev.map((x) => {
+              const hit = updated.find((u) => u.no && u.no === x.rfqNo)
+              return hit ? { ...x, stdPrice: round(hit.price / 1.13, 2), remark: '已询价回填' } : x
+            }))
+          }
+          setMsg({ kind: 'ok', text: `已检查 ${r.checked || 0} 条询价，回填 ${updated.length} 条` })
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setBusy(false) }
       }
 
       async function saveRfqDraft() {
@@ -639,7 +660,8 @@ window.__ModuleLoader__.load({
               sections.map((x) => h('option', { key: x.title, value: x.title }, x.title))) : h('span', { className: 'presales-muted' }, '模板未识别到分节，按“产品报价”输出')),
           h('div', { className: 'presales-muted', style: { marginTop: 4 } }, '先选分节，再从下面挂产品；产品会记到当前分节'),
           h('div', { className: 'presales-row', style: { marginTop: 8 } },
-            h('button', { className: 'presales-btn', type: 'button', onClick: () => setTempOpen(!tempOpen) }, tempOpen ? '收起临时产品' : '新增临时产品（可暂估）')),
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => setTempOpen(!tempOpen) }, tempOpen ? '收起临时产品' : '新增临时产品（可暂估）'),
+            h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void syncRfqReplies() }, '同步询价回复')),
           tempOpen ? h('div', { className: 'presales-card', style: { marginTop: 8 } },
             h('div', { className: 'presales-grid' },
               h('label', null, h('span', { className: 'presales-label' }, '名称'), h('input', { className: 'presales-input', value: tempForm.name, onChange: (e) => setTempForm({ ...tempForm, name: e.target.value }) })),
