@@ -345,7 +345,7 @@ window.__ModuleLoader__.load({
         const item = {
           code: `TMP-${Date.now()}`, name: tempForm.name.trim(), spec: tempForm.spec, brand: tempForm.brand,
           model: tempForm.model, unit: tempForm.unit || '项', stdPrice: Number(tempForm.price) || 0,
-          taxRate: 0.13, qty: Number(tempForm.qty) || 1, discount: 1, temp: true, section,
+          taxRate: 0.13, qty: Number(tempForm.qty) || 1, discount: 1, temp: true, section: tempForm.section || section,
           uid: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         }
         if (tempRfq) {
@@ -359,7 +359,7 @@ window.__ModuleLoader__.load({
           } catch (e) { setMsg({ kind: 'err', text: `询价单创建失败：${e.message || e}` }) }
         }
         setCart((prev) => [...prev, item])
-        setTempForm({ name: '', spec: '', brand: '', model: '', unit: '项', qty: 1, price: '' })
+        setTempForm({ name: '', spec: '', brand: '', model: '', unit: '项', qty: 1, price: '', expand: false })
         setTempOpen(false)
       }
 
@@ -707,23 +707,11 @@ window.__ModuleLoader__.load({
               sections.map((x) => h('option', { key: x.title, value: x.title }, x.title))) : h('span', { className: 'presales-muted' }, '模板未识别到分节')),
           h('div', { className: 'presales-muted', style: { marginTop: 2 } }, '选分节后挂产品；明细行里也可改分节'),
           h('div', { className: 'presales-row', style: { marginTop: 8 } },
-            h('button', { className: 'presales-btn', type: 'button', onClick: () => setTempOpen(!tempOpen) }, tempOpen ? '收起临时产品' : '新增临时产品（可暂估）'),
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => { setTempOpen(!tempOpen); setTempForm({ name: '', spec: '', brand: '', model: '', unit: '项', qty: 1, price: '' }) } }, tempOpen ? '取消新增' : '＋ 新增临时产品'),
             h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void syncRfqReplies() }, '同步询价回复'),
             h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void batchMail() }, `生成选中询价邮件（${Object.values(selected).filter(Boolean).length}）`)),
-          tempOpen ? h('div', { className: 'presales-card', style: { marginTop: 8 } },
-            h('div', { className: 'presales-grid' },
-              h('label', null, h('span', { className: 'presales-label' }, '名称'), h('input', { className: 'presales-input', value: tempForm.name, onChange: (e) => setTempForm({ ...tempForm, name: e.target.value }) })),
-              h('label', null, h('span', { className: 'presales-label' }, '规格'), h('input', { className: 'presales-input', value: tempForm.spec, onChange: (e) => setTempForm({ ...tempForm, spec: e.target.value }) })),
-              h('label', null, h('span', { className: 'presales-label' }, '品牌'), h('input', { className: 'presales-input', value: tempForm.brand, onChange: (e) => setTempForm({ ...tempForm, brand: e.target.value }) })),
-              h('label', null, h('span', { className: 'presales-label' }, '型号'), h('input', { className: 'presales-input', value: tempForm.model, onChange: (e) => setTempForm({ ...tempForm, model: e.target.value }) })),
-              h('label', null, h('span', { className: 'presales-label' }, '单位'), h('input', { className: 'presales-input', value: tempForm.unit, onChange: (e) => setTempForm({ ...tempForm, unit: e.target.value }) })),
-              h('label', null, h('span', { className: 'presales-label' }, '数量'), h('input', { className: 'presales-input', type: 'number', min: 0, value: tempForm.qty, onChange: (e) => setTempForm({ ...tempForm, qty: Number(e.target.value) }) })),
-              h('label', null, h('span', { className: 'presales-label' }, '暂估未税单价'), h('input', { className: 'presales-input', type: 'number', min: 0, value: tempForm.price, onChange: (e) => setTempForm({ ...tempForm, price: e.target.value }) }))),
-            h('div', { className: 'presales-row', style: { marginTop: 8 } },
-              h('label', { className: 'presales-muted' }, h('input', { type: 'checkbox', checked: tempRfq, onChange: (e) => setTempRfq(e.target.checked) }), ' 同时建询价单'),
-              h('button', { className: 'presales-btn', type: 'button', onClick: () => void addTemp() }, '加入当前分节'),
-              h('span', { className: 'presales-muted' }, '临时产品只存在本报价；可先暂估，后续询价回填'))) : null,
-          cart.length ? h('table', { className: 'presales-table' },
+
+          (cart.length || tempOpen) ? h('table', { className: 'presales-table' },
             h('thead', null, h('tr', null,
               ['选', '产品', '分节', '单位', '未税单价', '数量', '折扣', '含税小计', ''].map((t) => h('th', { key: t }, t)))),
             h('tbody', null, cart.map((l) => {
@@ -743,7 +731,27 @@ window.__ModuleLoader__.load({
                   l.temp ? h('button', { className: 'presales-btn', type: 'button', onClick: () => void openRfqMail(l) }, '询价邮件') : null,
                   l.temp ? h('button', { className: 'presales-btn', type: 'button', onClick: () => void fillRfqPrice(l) }, '回填价') : null,
                   h('button', { className: 'presales-btn', type: 'button', onClick: () => remove(itemKey(l)) }, '移除')))
-            }))) : h('div', { className: 'presales-muted' }, '还没有明细；先从上面选分节、挂产品，或新增临时产品'),
+            }),
+            tempOpen ? h('tr', { className: 'presales-draft' },
+              h('td', null, h('input', { type: 'checkbox', checked: tempRfq, onChange: (e) => setTempRfq(e.target.checked) })),
+              h('td', null, h('input', { className: 'presales-input', placeholder: '临时产品名称', value: tempForm.name, onChange: (e) => setTempForm({ ...tempForm, name: e.target.value }) })),
+              h('td', null, h('select', { className: 'presales-select', value: tempForm.section || section, onChange: (e) => setTempForm({ ...tempForm, section: e.target.value }) },
+                (sections.length ? sections.map((x) => x.title) : [section || '产品报价']).map((t) => h('option', { key: t, value: t }, t)))),
+              h('td', null, h('input', { className: 'presales-input', style: { width: 60 }, value: tempForm.unit, onChange: (e) => setTempForm({ ...tempForm, unit: e.target.value }) })),
+              h('td', null, h('input', { type: 'number', min: 0, style: { width: 100 }, value: tempForm.price, onChange: (e) => setTempForm({ ...tempForm, price: e.target.value }) })),
+              h('td', null, h('input', { type: 'number', min: 0, style: { width: 60 }, value: tempForm.qty, onChange: (e) => setTempForm({ ...tempForm, qty: Number(e.target.value) }) })),
+              h('td', null, '-'),
+              h('td', null, money(round((Number(tempForm.price) || 0) * (Number(tempForm.qty) || 0) * 1.13, 2))),
+              h('td', null,
+                h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void addTemp() }, '保存'),
+                h('button', { className: 'presales-btn', type: 'button', onClick: () => setTempForm({ ...tempForm, expand: !tempForm.expand }) }, tempForm.expand ? '收起' : '更多'))) : null,
+            tempOpen && tempForm.expand ? h('tr', { className: 'presales-draft-more' },
+              h('td', { colSpan: 9 },
+                h('div', { className: 'presales-grid' },
+                  h('label', null, h('span', { className: 'presales-label' }, '规格'), h('input', { className: 'presales-input', value: tempForm.spec, onChange: (e) => setTempForm({ ...tempForm, spec: e.target.value }) })),
+                  h('label', null, h('span', { className: 'presales-label' }, '品牌'), h('input', { className: 'presales-input', value: tempForm.brand, onChange: (e) => setTempForm({ ...tempForm, brand: e.target.value }) })),
+                  h('label', null, h('span', { className: 'presales-label' }, '型号'), h('input', { className: 'presales-input', value: tempForm.model, onChange: (e) => setTempForm({ ...tempForm, model: e.target.value }) }))))) : null,
+            )) : h('div', { className: 'presales-muted' }, '还没有明细；先从上面选分节、挂产品，或新增临时产品'),
           h('div', { className: 'presales-total', style: { marginTop: 12 } },
             h('span', null, '未税 ', h('b', null, money(totals.untaxed))),
             h('span', null, '税额 ', h('b', null, money(totals.tax))),
