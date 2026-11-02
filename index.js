@@ -31,6 +31,8 @@ import {
 import { resolveTables } from './lib/tables.js'
 import { buildQuoteLayout } from './lib/xlsx-layout.js'
 import { PRESALES_SKILL, NEW_OPP_PROMPT } from './lib/skill.js'
+import { planSectionWrites } from './lib/section-render.js'
+import { buildRfqMail } from './lib/rfq-mail.js'
 import * as XLSX from 'xlsx'
 
 export const name = 'presales'
@@ -807,6 +809,7 @@ export function apply(ctx, rawConfig = {}) {
         '规格': l.spec, '品牌': l.brand, '型号': l.model, '单位': l.unit, '数量': l.qty,
         '标准未税单价': l.stdPrice, '折扣': l.discount, '不含税单价': l.untaxedUnit, '税率': l.taxRate,
         '税额': l.tax, '含税单价': l.grossUnit, '不含税小计': l.untaxedSubtotal, '含税小计': l.grossSubtotal, '备注': l.remark || '',
+        '行类型': l.lineType || '目录产品', '询价编号': l.rfqNo || '', '价格状态': l.priceStatus || '已定价',
       })))
       let link = ''
       try {
@@ -981,36 +984,28 @@ export function apply(ctx, rawConfig = {}) {
       '{{售后保障}}': meta.warranty || '',
       '{{报价说明}}': meta.notes || '',
     }
-    const slots = []
-    for (const c of cells) {
-      const t = String(c.cell_text || '')
-      if (t.includes('{{序号}}') || t.includes('{{产品名称}}')) slots.push(c.row_from)
+    const sections = await templateSections(tpl['模板名称'] || '')
+    const plan = planSectionWrites(dto.lines || [], sections, cells, { scalars: scalar })
+    if (plan.overflow.length) {
+      throw new Error(`模板分节明细行不足：${plan.overflow.map((x) => `${x.section || '未分节'}「${x.name}」`).join('、')}，请在该分节补占位行`)
     }
-    const uniqSlots = [...new Set(slots)].sort((a, b) => a - b)
-    const slotIndexFor = new Map(uniqSlots.map((r, i) => [r, i]))
-    const items = dto.lines || []
-    const updates = []
+    const updates = plan.writes.map((w) => ({
+      row_from: w.row, row_to: w.row, col_from: w.col, col_to: w.col,
+      op_type: 'cell_operation_type_formula', formula: w.text,
+    }))
+    const taken = new Set(plan.writes.map((w) => `${w.row}:${w.col}`))
+    const emptyRows = new Set(plan.emptySlots.map((x) => x.row))
     for (const c of cells) {
+      const key = `${c.row_from}:${c.col_from}`
+      if (taken.has(key)) continue
       const t = String(c.cell_text || '')
       if (!t.includes('{{')) continue
-      let value = null
-      if (t.includes('{{序号}}') || t.includes('{{产品名称}}')) {
-        const idx = slotIndexFor.get(c.row_from)
-        const item = items[idx]
-        if (!item) continue
-        const map = {
-          '{{序号}}': item.lineNo, '{{产品类型}}': item.category || '', '{{产品名称}}': item.name,
-          '{{产品名称/规格描述}}': item.name, '{{规格}}': item.spec || '', '{{规格描述}}': item.spec || '',
-          '{{模块名称}}': item.module || '', '{{品牌}}': item.brand || '', '{{型号}}': item.model || '',
-          '{{单价}}': item.grossUnit, '{{单位}}': item.unit || '', '{{数量}}': item.qty,
-          '{{总价}}': item.grossSubtotal, '{{含税单价}}': item.grossUnit,
-          '{{税率}}': `${(Number(item.taxRate) * 100).toFixed(0)}%`, '{{备注}}': item.remark || '',
-        }
-        value = t.replace(/\{\{[^{}]+\}\}/g, (m) => (map[m] === undefined ? '' : String(map[m])))
-      } else {
-        value = t.replace(/\{\{[^{}]+\}\}/g, (m) => (scalar[m] === undefined ? '' : String(scalar[m])))
+      if (emptyRows.has(c.row_from)) {
+        updates.push({ row_from: c.row_from, row_to: c.row_from, col_from: c.col_from, col_to: c.col_from, op_type: 'cell_operation_type_formula', formula: '' })
+        continue
       }
-      if (value !== null) updates.push({ row_from: c.row_from, row_to: c.row_from, col_from: c.col_from, col_to: c.col_from, op_type: 'cell_operation_type_formula', formula: value })
+      const value = t.replace(/\{\{[^{}]+\}\}/g, (m) => (scalar[m] === undefined ? '' : String(scalar[m])))
+      updates.push({ row_from: c.row_from, row_to: c.row_from, col_from: c.col_from, col_to: c.col_from, op_type: 'cell_operation_type_formula', formula: value })
     }
     const ok = await runCli(cli, ['api', 'post', `/v7/sheets/${realId}/worksheets/${sid}/range_data/batch_update`, '--data', JSON.stringify({ range_data: updates }), '-o', 'json'])
     if (!ok.ok) throw new Error(`写入模板失败：${ok.stderr || ok.stdout}`)
@@ -1115,6 +1110,79 @@ export function apply(ctx, rawConfig = {}) {
   }
 
   // ── 模板文件变更检测 ────────────────────────────────────────
+  async function nextRfqNo() {
+    const rows = await list('rfq')
+    const year = new Date().getFullYear()
+    let max = 0
+    for (const r of rows) {
+      const m = String(r['询价编号'] || '').match(/RFQ-(\d{4})-(\d+)/)
+      if (m && Number(m[1]) === year) max = Math.max(max, Number(m[2]))
+    }
+    return `RFQ-${year}-${String(max + 1).padStart(4, '0')}`
+  }
+
+  async function createRfq(payload = {}) {
+    const no = await nextRfqNo()
+    const row = {
+      '询价编号': no,
+      '商机编号': payload.opportunityNo || '',
+      '商机名称': payload.opportunityName || '',
+      '报价单号': payload.quoteNo || '',
+      '产品名称': payload.name || '',
+      '规格': payload.spec || '',
+      '品牌': payload.brand || '',
+      '型号': payload.model || '',
+      '单位': payload.unit || '项',
+      '数量': Number(payload.qty) || 1,
+      '目标价（含税）': Number(payload.targetPrice) || null,
+      '厂商名称': payload.vendor || '',
+      '厂商邮箱': payload.vendorEmail || '',
+      '分节': payload.section || '',
+      '询价状态': '草稿',
+      '收件人确认': '待确认',
+      '备注': payload.note || '',
+    }
+    const [id] = await create('rfq', [row])
+    return { id, no, ...row }
+  }
+
+  async function rfqMailPreview(id) {
+    const rec = (await list('rfq')).find((x) => x._id === id || x['询价编号'] === id)
+    if (!rec) throw new Error('询价单不存在')
+    const mail = buildRfqMail({
+      rfq: rec,
+      opportunity: { no: rec['商机编号'], name: rec['商机名称'] },
+      sender: { name: '' },
+      recipients: rec['厂商邮箱'] || '',
+    })
+    return { ...mail, to: rec['厂商邮箱'] || '', rfqNo: rec['询价编号'] }
+  }
+
+  async function markRfqSent(id, payload = {}) {
+    const rec = (await list('rfq')).find((x) => x._id === id || x['询价编号'] === id)
+    if (!rec) throw new Error('询价单不存在')
+    await updateRecord('rfq', rec._id, {
+      '询价状态': '已发送',
+      '收件人确认': '已确认',
+      '发件账号': payload.sender || '',
+      '邮件消息ID': payload.messageId || '',
+      '发送时间': payload.sentAt || today(),
+    })
+    return { ok: true }
+  }
+
+  async function replyRfq(id, payload = {}) {
+    const rec = (await list('rfq')).find((x) => x._id === id || x['询价编号'] === id)
+    if (!rec) throw new Error('询价单不存在')
+    await updateRecord('rfq', rec._id, {
+      '询价状态': '已回复',
+      '回复报价（含税）': Number(payload.price) || null,
+      '回复日期': payload.date || today(),
+      '备注': [rec['备注'], payload.note].filter(Boolean).join('\n'),
+    })
+    return { ok: true }
+  }
+
   async function templateSections(templateName) {
     try {
       const rec = (await list('quoteTemplates')).find((t) => t['模板名称'] === templateName)
@@ -1278,6 +1346,7 @@ export function apply(ctx, rawConfig = {}) {
       '规格': l.spec, '品牌': l.brand, '型号': l.model, '单位': l.unit, '数量': l.qty,
       '标准未税单价': l.stdPrice, '折扣': l.discount, '不含税单价': l.untaxedUnit, '税率': l.taxRate,
       '税额': l.tax, '含税单价': l.grossUnit, '不含税小计': l.untaxedSubtotal, '含税小计': l.grossSubtotal, '备注': l.remark || '',
+        '行类型': l.lineType || '目录产品', '询价编号': l.rfqNo || '', '价格状态': l.priceStatus || '已定价',
     })))
     return { quoteNo, quoteId, versionId, itemCount: itemIds.length, grossTotal: dto.totals.grossTotal }
   }
@@ -1486,6 +1555,21 @@ export function apply(ctx, rawConfig = {}) {
             await updateRecord('opportunities', r._id, { '最后跟进时间': d })
             return json(res, 200, { ok: true })
           }
+          if (route === 'rfq_create' && req.method === 'POST') {
+            try { const body = await readBody(req); return json(res, 200, { ok: true, ...(await createRfq(body)) }) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'rfq_list') {
+            try { return json(res, 200, { ok: true, items: (await list('rfq')).map((r) => ({ id: r._id, no: r['询价编号'], name: r['产品名称'], status: r['询价状态'], vendor: r['厂商名称'] })) }) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'rfq_mail') {
+            try { return json(res, 200, { ok: true, ...(await rfqMailPreview(String(url.searchParams.get('id') || ''))) }) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'rfq_sent' && req.method === 'POST') {
+            try { const body = await readBody(req); return json(res, 200, await markRfqSent(String(body.id || ''), body)) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'rfq_reply' && req.method === 'POST') {
+            try { const body = await readBody(req); return json(res, 200, await replyRfq(String(body.id || ''), body)) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
+          }
           if (route === 'template_sections') {
             try { return json(res, 200, { ok: true, sections: await templateSections(String(url.searchParams.get('template') || '')) }) } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
           }
@@ -1611,19 +1695,37 @@ export function apply(ctx, rawConfig = {}) {
             const lines = []
             const violations = []
             for (const [idx, it] of (body.items || []).entries()) {
-              const found = findProduct(catalog, it.code || it.name)
-              if (found.error) { violations.push({ level: 'block', message: `${it.code || it.name}：${found.error}` }); continue }
-              if (found.candidates) { violations.push({ level: 'block', message: `「${it.code || it.name}」匹配到多个产品` }); continue }
-              const p = found.product
+              let p
+              if (it.temp) {
+                p = {
+                  id: `temp-${idx}`, code: it.code || `TMP-${Date.now()}-${idx}`, name: it.name || '临时产品',
+                  spec: it.spec || '', brand: it.brand || '', model: it.model || '', unit: it.unit || '项',
+                  stdPrice: Number(it.price) || 0, costPrice: 0, taxRate: 0.13, minDiscount: 0, modules: [], l2: '', status: '在售',
+                }
+              } else {
+                const found = findProduct(catalog, it.code || it.name)
+                if (found.error) { violations.push({ level: 'block', message: `${it.code || it.name}：${found.error}` }); continue }
+                if (found.candidates) { violations.push({ level: 'block', message: `「${it.code || it.name}」匹配到多个产品` }); continue }
+                p = found.product
+              }
               const qty = Number(it.qty) || 0
               const discount = Number(it.discount) || 1
               const expanded = expandProduct(p, { qty, discount, modules: it.modules, section: it.section || '' })
               for (const e of expanded) {
-                for (const v of validateLine({ product: { ...p, name: e.name, stdPrice: e.stdPrice, costPrice: e.costPrice }, qty, discount, today: today() })) {
-                  if (v.level === 'block') violations.push({ product: p.code, ...v })
+                if (!it.temp) {
+                  for (const v of validateLine({ product: { ...p, name: e.name, stdPrice: e.stdPrice, costPrice: e.costPrice }, qty, discount, today: today() })) {
+                    if (v.level === 'block') violations.push({ product: p.code, ...v })
+                  }
                 }
                 const money = computeLine({ stdPrice: e.stdPrice, costPrice: e.costPrice, discount, qty, taxRate: e.taxRate })
-                lines.push({ lineNo: lines.length + 1, code: e.code, name: e.name, spec: e.spec, brand: e.brand, model: e.model, unit: e.unit, qty, discount, stdPrice: e.stdPrice, ...money, section: e.section, remark: e.remark, category: e.category })
+                lines.push({
+                  lineNo: lines.length + 1, code: e.code, name: e.name, spec: e.spec, brand: e.brand, model: e.model, unit: e.unit, qty, discount,
+                  stdPrice: e.stdPrice, ...money, section: e.section,
+                  lineType: it.temp ? '临时产品' : '目录产品',
+                  rfqNo: it.rfqNo || '',
+                  priceStatus: it.temp ? (Number(it.price) > 0 ? '暂估' : '待询价') : '已定价',
+                  remark: it.temp ? `临时产品（${it.rfqNo || '待询价'}）` : (e.remark || ''), category: e.category,
+                })
               }
             }
             if (violations.length) return json(res, 400, { ok: false, error: violations.map((v) => v.message).join('；') })
