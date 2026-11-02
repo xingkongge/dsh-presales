@@ -221,12 +221,20 @@ window.__ModuleLoader__.load({
           h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
             h('b', null, `询价邮件 ${mailPreview.rfqNo || ''}`),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => setMailPreview(null) }, '关闭')),
-          h('div', { className: 'presales-muted' }, `收件人：${mailPreview.to || '（未填厂商邮箱）'}（请人工确认后再发送）`),
+          h('div', { className: 'presales-grid', style: { marginTop: 8 } },
+            h('label', null, h('span', { className: 'presales-label' }, '发件账号（默认上次）'),
+              h('select', { className: 'presales-select', value: mailFrom, onChange: (e) => setMailFrom(e.target.value) },
+                h('option', { value: '' }, '使用默认账号'),
+                mailAccounts.map((a) => h('option', { key: a, value: a }, a)))),
+            h('label', null, h('span', { className: 'presales-label' }, '收件人（请确认）'),
+              h('input', { className: 'presales-input', value: mailTo, onChange: (e) => setMailTo(e.target.value), placeholder: 'vendor@example.com' }))),
           h('div', { className: 'presales-label', style: { marginTop: 6 } }, '主题'),
           h('input', { className: 'presales-input', readOnly: true, value: mailPreview.subject || '' }),
           h('div', { className: 'presales-label', style: { marginTop: 6 } }, '正文'),
           h('textarea', { className: 'presales-input', style: { minHeight: 180 }, readOnly: true, value: mailPreview.text || '' }),
+          draftMsg ? h('div', { className: 'presales-muted', style: { marginTop: 6 } }, draftMsg) : null,
           h('div', { className: 'presales-row', style: { marginTop: 8 } },
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => void saveRfqDraft() }, '存为邮件草稿（不发送）'),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => { navigator.clipboard.writeText(`${mailPreview.subject}\n\n${mailPreview.text}`) } }, '复制主题+正文'),
             h('a', { className: 'presales-btn', href: `mailto:?subject=${encodeURIComponent(mailPreview.subject || '')}&body=${encodeURIComponent(mailPreview.text || '')}` }, '打开邮件客户端'))) : null,
         msg ? h('div', { className: `presales-msg ${msg.kind === 'ok' ? 'ok' : 'err'}` }, msg.text) : null)
@@ -260,6 +268,10 @@ window.__ModuleLoader__.load({
       const [tempForm, setTempForm] = React.useState({ name: '', spec: '', brand: '', model: '', unit: '项', qty: 1, price: '' })
       const [tempRfq, setTempRfq] = React.useState(true)
       const [mailPreview, setMailPreview] = React.useState(null)
+      const [mailAccounts, setMailAccounts] = React.useState([])
+      const [mailFrom, setMailFrom] = React.useState(() => localStorage.getItem('presales.lastRfqFrom') || '')
+      const [mailTo, setMailTo] = React.useState('')
+      const [draftMsg, setDraftMsg] = React.useState('')
       const fileRef = React.useRef(null)
       const [updating, setUpdating] = React.useState('')
       const [chatNotice, setChatNotice] = React.useState('')
@@ -286,6 +298,13 @@ window.__ModuleLoader__.load({
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
       React.useEffect(() => { void load(); void checkUpdates() }, [])
+      React.useEffect(() => {
+        api('email_accounts').then((r) => {
+          const list = r.accounts || []
+          setMailAccounts(list)
+          if (!mailFrom && list.length) setMailFrom(list[0])
+        }).catch(() => {})
+      }, [])
       React.useEffect(() => {
         if (!template) return
         let alive = true
@@ -352,8 +371,18 @@ window.__ModuleLoader__.load({
 
       async function openRfqMail(line) {
         if (!line.rfqId) { setMsg({ kind: 'err', text: '这一行没有关联询价单' }); return }
-        try { setMailPreview(await api('rfq_mail?id=' + encodeURIComponent(line.rfqId))) }
+        try { const m = await api('rfq_mail?id=' + encodeURIComponent(line.rfqId)); setMailPreview(m); setMailTo(m.to || ''); setDraftMsg('') }
         catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+      }
+
+      async function saveRfqDraft() {
+        if (!mailPreview) return
+        if (!mailTo.trim()) { setDraftMsg('请先填收件人'); return }
+        try {
+          const r = await api('rfq_draft', { method: 'POST', body: JSON.stringify({ id: mailPreview.id || mailPreview.rfqId || '', account: mailFrom, to: mailTo }) })
+          localStorage.setItem('presales.lastRfqFrom', mailFrom)
+          setDraftMsg(`已存为邮件草稿 ${r.draft?.id || ''}（未发送，请到 设置→邮件→草稿 确认）`)
+        } catch (e) { setDraftMsg(String(e.message || e)) }
       }
 
       async function fillRfqPrice(line) {

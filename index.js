@@ -1110,6 +1110,31 @@ export function apply(ctx, rawConfig = {}) {
   }
 
   // ── 模板文件变更检测 ────────────────────────────────────────
+  async function callHostTool(name, args) {
+    const tools = typeof ctx.get === 'function' ? ctx.get('tools') : null
+    if (!tools || typeof tools.execute !== 'function') throw new Error('工具服务不可用')
+    const def = tools.get(name)
+    if (!def) throw new Error(`未安装或未启用 ${name}`)
+    const ctrl = new AbortController()
+    const res = await tools.execute({
+      name, arguments: args, callId: `presales-${name}-${Date.now()}`,
+      signal: ctrl.signal,
+    })
+    if (res.isError) throw new Error(res.error?.message || `${name} 执行失败`)
+    return res.value
+  }
+
+  async function emailAccounts() {
+    const health = await callHostTool('email_health', {})
+    const accounts = []
+    const list = health?.accounts || health?.checks || []
+    for (const a of list) {
+      const name = a.name || a.account || a.label
+      if (name && !/邮箱配置|账号/.test(String(name))) accounts.push(String(name))
+    }
+    return { accounts: [...new Set(accounts)], raw: health }
+  }
+
   async function nextRfqNo() {
     const rows = await list('rfq')
     const year = new Date().getFullYear()
@@ -1155,7 +1180,7 @@ export function apply(ctx, rawConfig = {}) {
       sender: { name: '' },
       recipients: rec['厂商邮箱'] || '',
     })
-    return { ...mail, to: rec['厂商邮箱'] || '', rfqNo: rec['询价编号'] }
+    return { ...mail, id: rec._id, to: rec['厂商邮箱'] || '', rfqNo: rec['询价编号'] }
   }
 
   async function markRfqSent(id, payload = {}) {
@@ -1554,6 +1579,22 @@ export function apply(ctx, rawConfig = {}) {
             }])
             await updateRecord('opportunities', r._id, { '最后跟进时间': d })
             return json(res, 200, { ok: true })
+          }
+          if (route === 'email_accounts') {
+            try { return json(res, 200, { ok: true, ...(await emailAccounts()) }) } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'rfq_draft' && req.method === 'POST') {
+            try {
+              const body = await readBody(req)
+              const mail = await rfqMailPreview(String(body.id || ''))
+              const draft = await callHostTool('email_draft', {
+                account: body.account || '',
+                to: body.to || mail.to || '',
+                subject: mail.subject,
+                text: mail.text,
+              })
+              return json(res, 200, { ok: true, draft })
+            } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
           }
           if (route === 'rfq_create' && req.method === 'POST') {
             try { const body = await readBody(req); return json(res, 200, { ok: true, ...(await createRfq(body)) }) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
