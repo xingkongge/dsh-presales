@@ -1146,35 +1146,79 @@ export function apply(ctx, rawConfig = {}) {
     return `RFQ-${year}-${String(max + 1).padStart(4, '0')}`
   }
 
-  async function createRfq(payload = {}) {
+  async function createRfqBatch(payload = {}) {
+    const items = Array.isArray(payload.items) && payload.items.length ? payload.items : [payload]
     const no = await nextRfqNo()
-    const row = {
+    const header = {
       '询价编号': no,
       '商机编号': payload.opportunityNo || '',
       '商机名称': payload.opportunityName || '',
       '报价单号': payload.quoteNo || '',
-      '产品名称': payload.name || '',
-      '规格': payload.spec || '',
-      '品牌': payload.brand || '',
-      '型号': payload.model || '',
-      '单位': payload.unit || '项',
-      '数量': Number(payload.qty) || 1,
-      '目标价（含税）': Number(payload.targetPrice) || null,
       '厂商名称': payload.vendor || '',
       '厂商邮箱': payload.vendorEmail || '',
-      '分节': payload.section || '',
       '询价状态': '草稿',
       '收件人确认': '待确认',
       '备注': payload.note || '',
     }
-    // WPS 对 Currency/Date 等字段传 null 会返回 500（InternalServerError），空值必须省略
     const clean = {}
-    for (const [k, v] of Object.entries(row)) {
-      if (v === null || v === undefined || v === '') continue
-      clean[k] = v
-    }
+    for (const [k, v] of Object.entries(header)) { if (v !== null && v !== undefined && v !== '') clean[k] = v }
     const [id] = await create('rfq', [clean])
-    return { id, no, ...clean }
+    const rows = items.map((it) => {
+      const row = {
+        '询价编号': no,
+        '产品名称': it.name || '',
+        '规格': it.spec || '',
+        '品牌': it.brand || '',
+        '型号': it.model || '',
+        '单位': it.unit || '项',
+        '数量': Number(it.qty) || 1,
+        '目标价（含税）': Number(it.targetPrice) || null,
+        '关联报价行标识': it.lineId || it.code || '',
+        '备注': it.note || '',
+      }
+      const c = {}
+      for (const [k, v] of Object.entries(row)) { if (v !== null && v !== undefined && v !== '') c[k] = v }
+      return c
+    })
+    if (rows.length) await create('rfqItems', rows)
+    return { id, no, itemCount: rows.length, vendor: payload.vendor || '' }
+  }
+
+  async function listRfqs() {
+    const [headers, items] = await Promise.all([list('rfq'), list('rfqItems')])
+    return headers.slice().reverse().map((h) => {
+      const lines = items.filter((x) => x['询价编号'] === h['询价编号'])
+      return {
+        id: h._id, no: h['询价编号'], opportunityNo: h['商机编号'] || '', opportunityName: h['商机名称'] || '',
+        vendor: h['厂商名称'] || '', vendorEmail: h['厂商邮箱'] || '', status: h['询价状态'] || '',
+        itemCount: lines.length, section: lines[0] ? '' : '',
+        sentAt: h['发送时间'] || '', createdAt: h['创建时间'] || '',
+      }
+    })
+  }
+
+  async function rfqDetail(id) {
+    const headers = await list('rfq')
+    const h = headers.find((x) => x._id === id || x['询价编号'] === id)
+    if (!h) throw new Error('询价单不存在')
+    const items = (await list('rfqItems')).filter((x) => x['询价编号'] === h['询价编号'])
+    return { header: { id: h._id, ...h }, items: items.map((x) => ({ id: x._id, ...x })) }
+  }
+
+  async function rfqMailPreview(id) {
+    const detail = await rfqDetail(id)
+    const h = detail.header
+    const rfq = { ...h, items: detail.items.map((x) => ({
+      name: x['产品名称'], spec: x['规格'], brand: x['品牌'], model: x['型号'],
+      unit: x['单位'], qty: x['数量'], targetPrice: x['目标价（含税）'], note: x['备注'],
+    })) }
+    const mail = buildRfqMail({
+      rfq,
+      opportunity: { no: h['商机编号'], name: h['商机名称'] },
+      sender: { name: '' },
+      recipients: h['厂商邮箱'] || '',
+    })
+    return { ...mail, id: h._id, to: h['厂商邮箱'] || '', rfqNo: h['询价编号'], itemCount: detail.items.length }
   }
 
   function extractPrice(text) {
@@ -1193,11 +1237,22 @@ export function apply(ctx, rawConfig = {}) {
     return nums.length ? Math.max(...nums) : null
   }
 
+  async function recalcVersionTotals(versionId) {
+    const items = (await list('quoteItems')).filter((it) => (it['报价版本'] || []).includes(versionId))
+    const ver = (await list('quoteVersions')).find((v) => v._id === versionId)
+    if (!ver) return
+    const sum = (k) => round(items.reduce((a, it) => a + (Number(it[k]) || 0), 0), 2)
+    const untaxed = sum('不含税小计'); const tax = sum('税额'); const gross = sum('含税小计')
+    await updateRecord('quoteVersions', versionId, { '不含税合计': untaxed, '税额合计': tax, '含税合计': gross })
+    for (const qid of (ver['报价单'] || [])) await updateRecord('quotes', qid, { '不含税合计': untaxed, '税额合计': tax, '含税合计': gross })
+  }
+
   async function syncRfqReplies(days = 30) {
-    const rfqs = (await list('rfq')).filter((r) => r['询价状态'] !== '已核价')
+    const [headers, allItems] = await Promise.all([list('rfq'), list('rfqItems')])
+    const pending = headers.filter((h) => h['询价状态'] !== '已核价')
     const results = []
-    for (const rec of rfqs) {
-      const no = rec['询价编号']
+    for (const h of pending) {
+      const no = h['询价编号']
       let mails = []
       try {
         const searched = await callHostTool('email_search', { query: no, limit: 5, since: new Date(Date.now() - days * 86400000).toISOString().slice(0, 10) })
@@ -1213,63 +1268,34 @@ export function apply(ctx, rawConfig = {}) {
         const hay = `${m.subject || ''}\n${body}`
         const price = extractPrice(hay)
         if (!price || !hay.includes(no)) continue
-        await updateRecord('rfq', rec._id, {
+        const lines = allItems.filter((x) => x['询价编号'] === no)
+        await updateRecord('rfq', h._id, {
           '询价状态': '已回复', '回复报价（含税）': price, '回复日期': (m.date || today()).slice(0, 10),
-          '备注': [rec['备注'], `邮件回复：${String(m.subject || '').slice(0, 80)}`].filter(Boolean).join('\n'),
+          '备注': [h['备注'], `邮件回复：${String(m.subject || '').slice(0, 80)}`].filter(Boolean).join('\n'),
         })
-        // 回填报价明细
-        const items = await list('quoteItems')
-        const hitItems = items.filter((it) => it['询价编号'] === no && it['价格状态'] !== '已核价')
         let applied = 0
-        for (const it of hitItems) {
-          const qty = Number(it['数量']) || 1
-          const untaxed = round(price / (1 + (Number(it['税率']) || 0.13)), 4)
-          const untaxedSub = round(untaxed * qty, 2)
-          const tax = round(untaxedSub * (Number(it['税率']) || 0.13), 2)
-          await updateRecord('quoteItems', it._id, {
-            '含税单价': price, '不含税单价': untaxed, '税额': tax,
-            '不含税小计': untaxedSub, '含税小计': round(price * qty, 2),
-            '价格状态': '已核价', '备注': [it['备注'], `询价回复回填 ${price}`].filter(Boolean).join('；'),
-          })
-          applied += 1
-        }
-        // 重算版本与报价单合计
-        if (applied) {
-          for (const it of hitItems) {
-            const verIds = it['报价版本'] || []
-            for (const vid of verIds) await recalcVersionTotals(vid)
+        if (lines.length === 1) {
+          const item = lines[0]
+          await updateRecord('rfqItems', item._id, { '回复报价（含税）': price })
+          const quoteItems = (await list('quoteItems')).filter((it) => it['询价编号'] === no && it['价格状态'] !== '已核价')
+          for (const it of quoteItems) {
+            const qty = Number(it['数量']) || 1
+            const untaxed = round(price / (1 + (Number(it['税率']) || 0.13)), 4)
+            const untaxedSub = round(untaxed * qty, 2)
+            await updateRecord('quoteItems', it._id, {
+              '含税单价': price, '不含税单价': untaxed, '税额': round(untaxedSub * (Number(it['税率']) || 0.13), 2),
+              '不含税小计': untaxedSub, '含税小计': round(price * qty, 2), '价格状态': '已核价',
+              '备注': [it['备注'], `询价回复回填 ${price}`].filter(Boolean).join('；'),
+            })
+            for (const vid of (it['报价版本'] || [])) await recalcVersionTotals(vid)
+            applied += 1
           }
         }
-        results.push({ no, price, uids: [m.uid], applied })
+        results.push({ no, price, applied, needsReview: lines.length > 1 })
         break
       }
     }
-    return { checked: rfqs.length, updated: results.filter((r) => r.price) }
-  }
-
-  async function recalcVersionTotals(versionId) {
-    const items = (await list('quoteItems')).filter((it) => (it['报价版本'] || []).includes(versionId))
-    const versions = await list('quoteVersions')
-    const ver = versions.find((v) => v._id === versionId)
-    if (!ver) return
-    const sum = (k) => round(items.reduce((a, it) => a + (Number(it[k]) || 0), 0), 2)
-    const untaxed = sum('不含税小计'); const tax = sum('税额'); const gross = sum('含税小计')
-    await updateRecord('quoteVersions', versionId, { '不含税合计': untaxed, '税额合计': tax, '含税合计': gross })
-    for (const qid of (ver['报价单'] || [])) {
-      await updateRecord('quotes', qid, { '不含税合计': untaxed, '税额合计': tax, '含税合计': gross })
-    }
-  }
-
-  async function rfqMailPreview(id) {
-    const rec = (await list('rfq')).find((x) => x._id === id || x['询价编号'] === id)
-    if (!rec) throw new Error('询价单不存在')
-    const mail = buildRfqMail({
-      rfq: rec,
-      opportunity: { no: rec['商机编号'], name: rec['商机名称'] },
-      sender: { name: '' },
-      recipients: rec['厂商邮箱'] || '',
-    })
-    return { ...mail, id: rec._id, to: rec['厂商邮箱'] || '', rfqNo: rec['询价编号'] }
+    return { checked: pending.length, updated: results.filter((r) => r.price) }
   }
 
   async function markRfqSent(id, payload = {}) {
@@ -1711,10 +1737,13 @@ export function apply(ctx, rawConfig = {}) {
             try { return json(res, 200, { ok: true, ...(await syncRfqReplies(30)) }) } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
           }
           if (route === 'rfq_create' && req.method === 'POST') {
-            try { const body = await readBody(req); return json(res, 200, { ok: true, ...(await createRfq(body)) }) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
+            try { const body = await readBody(req); return json(res, 200, { ok: true, ...(await createRfqBatch(body)) }) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
           }
           if (route === 'rfq_list') {
-            try { return json(res, 200, { ok: true, items: (await list('rfq')).map((r) => ({ id: r._id, no: r['询价编号'], name: r['产品名称'], status: r['询价状态'], vendor: r['厂商名称'] })) }) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
+            try { return json(res, 200, { ok: true, items: await listRfqs() }) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'rfq_detail') {
+            try { return json(res, 200, { ok: true, ...(await rfqDetail(String(url.searchParams.get('id') || ''))) }) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
           }
           if (route === 'rfq_mail') {
             try { return json(res, 200, { ok: true, ...(await rfqMailPreview(String(url.searchParams.get('id') || ''))) }) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
