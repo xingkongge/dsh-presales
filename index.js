@@ -1167,8 +1167,14 @@ export function apply(ctx, rawConfig = {}) {
       '收件人确认': '待确认',
       '备注': payload.note || '',
     }
-    const [id] = await create('rfq', [row])
-    return { id, no, ...row }
+    // WPS 对 Currency/Date 等字段传 null 会返回 500（InternalServerError），空值必须省略
+    const clean = {}
+    for (const [k, v] of Object.entries(row)) {
+      if (v === null || v === undefined || v === '') continue
+      clean[k] = v
+    }
+    const [id] = await create('rfq', [clean])
+    return { id, no, ...clean }
   }
 
   function extractPrice(text) {
