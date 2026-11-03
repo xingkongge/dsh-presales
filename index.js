@@ -1933,6 +1933,14 @@ export function apply(ctx, rawConfig = {}) {
                 if (found.error) { violations.push({ level: 'block', message: `${it.code || it.name}：${found.error}` }); continue }
                 if (found.candidates) { violations.push({ level: 'block', message: `「${it.code || it.name}」匹配到多个产品` }); continue }
                 p = found.product
+                if (it.name !== undefined) p = { ...p, name: it.name }
+                if (it.brand !== undefined) p = { ...p, brand: it.brand }
+                if (it.model !== undefined) p = { ...p, model: it.model }
+                if (it.spec !== undefined) p = { ...p, spec: it.spec }
+                if (it.unit !== undefined) p = { ...p, unit: it.unit }
+                if (it.category !== undefined) p = { ...p, l2: it.category }
+                if (it.taxRate !== undefined) p = { ...p, taxRate: Number(it.taxRate) || p.taxRate }
+                if (it.stdPrice !== undefined) p = { ...p, stdPrice: Number(it.stdPrice) }
               }
               const qty = Number(it.qty) || 0
               const discount = Number(it.discount) || 1
@@ -1950,7 +1958,7 @@ export function apply(ctx, rawConfig = {}) {
                   lineType: it.temp ? '临时产品' : '目录产品',
                   rfqNo: it.rfqNo || '',
                   priceStatus: it.temp ? (Number(it.price) > 0 ? '暂估' : '待询价') : '已定价',
-                  remark: it.temp ? `临时产品（${it.rfqNo || '待询价'}）` : (e.remark || ''), category: e.category,
+                  remark: it.remark || (it.temp ? `临时产品（${it.rfqNo || '待询价'}）` : (e.remark || '')), category: e.category,
                 })
               }
             }

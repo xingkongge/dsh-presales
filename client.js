@@ -369,7 +369,7 @@ button.presales-badge{background:transparent;cursor:pointer}
         const item = {
           code: `TMP-${Date.now()}`, name: tempForm.name.trim(), spec: tempForm.spec, brand: tempForm.brand,
           model: tempForm.model, unit: tempForm.unit || '项', stdPrice: Number(tempForm.price) || 0,
-          taxRate: 0.13, qty: Number(tempForm.qty) || 1, discount: 1, temp: true, section: tempForm.section || section,
+          taxRate: 0.13, qty: Number(tempForm.qty) || 1, discount: 1, temp: true, section: tempForm.section || section, category: tempForm.category || '', remark: tempForm.remark || '',
           uid: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         }
         setCart((prev) => [...prev, item])
@@ -487,7 +487,7 @@ button.presales-badge{background:transparent;cursor:pointer}
             next[i] = { ...next[i], qty: next[i].qty + 1 }
             return next
           }
-          return [...prev, { ...p, qty: 1, discount: 1, taxRate: p.taxRate || 0.13, section, uid: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }]
+          return [...prev, { ...p, category: p.l2 || '', remark: '', qty: 1, discount: 1, taxRate: p.taxRate || 0.13, section, uid: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }]
         })
       }
       function patch(key, field, value) {
@@ -517,7 +517,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               opportunityNo: opp ? opp.no : '', template,
               localTemplateId: localTpl ? localTpl.id : '',
               localTemplateName: localTpl ? localTpl.name : '',
-              items: cart.map((x) => x.temp ? ({ temp: true, code: x.code, name: x.name, spec: x.spec, brand: x.brand, model: x.model, unit: x.unit, qty: Number(x.qty) || 0, price: Number(x.stdPrice) || 0, section: x.section || '' }) : ({ code: x.code, qty: Number(x.qty) || 0, discount: Number(x.discount) || 1, section: x.section || '' })),
+              items: cart.map((x) => x.temp ? ({ temp: true, code: x.code, name: x.name, spec: x.spec, brand: x.brand, model: x.model, unit: x.unit, qty: Number(x.qty) || 0, price: Number(x.stdPrice) || 0, section: x.section || '', category: x.category || '', remark: x.remark || '', taxRate: Number(x.taxRate) || 0.13 }) : ({ code: x.code, qty: Number(x.qty) || 0, discount: Number(x.discount) || 1, section: x.section || '', brand: x.brand, model: x.model, unit: x.unit, name: x.name, spec: x.spec, category: x.category || '', remark: x.remark || '', taxRate: Number(x.taxRate) || 0.13, stdPrice: Number(x.stdPrice) })),
             }),
           })
           setMsg({ kind: 'ok', text: `已生成 ${r.quoteNo}（含税 ${money(r.grossTotal)}）`, link: r.link || '' })
@@ -871,41 +871,56 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void syncRfqReplies() }, '同步询价回复'),
             h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void batchMail() }, `生成询价单（${Object.values(selected).filter(Boolean).length} 项）`)),
 
-          (cart.length || tempOpen) ? h('table', { className: 'presales-table' },
+          (cart.length || tempOpen) ? h('table', { className: 'presales-table', style: { minWidth: 1500 } },
             h('thead', null, h('tr', null,
-              ['选', '产品', '分节', '单位', '未税单价', '数量', '折扣', '含税小计', ''].map((t) => h('th', { key: t }, t)))),
-            h('tbody', null, cart.map((l) => {
+              ['选', '序号', '产品', '规格', '分节', '产品类型', '品牌', '型号', '单位', '未税单价', '数量', '折扣', '税率', '含税小计', '备注', ''].map((t) => h('th', { key: t }, t)))),
+            h('tbody', null, cart.map((l, rowIndex) => {
+              const rowNo = rowIndex + 1
               const unit = round(l.stdPrice * l.discount, 4)
               const gross = round(round(unit * l.qty, 2) * (1 + l.taxRate), 2)
               return h('tr', { key: itemKey(l) },
                 h('td', null, l.temp ? h('input', { type: 'checkbox', checked: Boolean(selected[itemKey(l)]), onChange: () => toggleSelect(itemKey(l)) }) : null),
-                h('td', null, l.name, l.temp ? h('span', { className: 'presales-badge' }, '临时') : null, h('div', { className: 'presales-muted' }, `${l.code}${l.brand ? ' · ' + l.brand : ''}${l.rfqNo ? ' · ' + l.rfqNo : ''}`)),
-                h('td', null, h('select', { className: 'presales-select', style: { maxWidth: 180 }, value: l.section || section, onChange: (e) => patch(itemKey(l), 'section', e.target.value) },
+                h('td', null, rowNo),
+                h('td', null, h('input', { className: 'presales-input', style: { width: 180 }, value: l.name, onChange: (e) => patch(itemKey(l), 'name', e.target.value) }), l.temp ? h('span', { className: 'presales-badge' }, '临时') : null, h('div', { className: 'presales-muted' }, `${l.code}${l.rfqNo ? ' · ' + l.rfqNo : ''}`)),
+                h('td', null, h('input', { className: 'presales-input', style: { width: 160 }, value: l.spec || '', onChange: (e) => patch(itemKey(l), 'spec', e.target.value) })),
+                h('td', null, h('select', { className: 'presales-select', style: { maxWidth: 150 }, value: l.section || section, onChange: (e) => patch(itemKey(l), 'section', e.target.value) },
                   (sections.length ? sections.map((x) => x.title) : [l.section || section || '产品报价']).map((t) => h('option', { key: t, value: t }, t)))),
-                h('td', null, l.unit),
-                h('td', null, l.temp ? h('input', { type: 'number', min: 0, value: l.stdPrice, onChange: (e) => patch(itemKey(l), 'stdPrice', Number(e.target.value)) }) : money(l.stdPrice)),
-                h('td', null, h('input', { type: 'number', min: 0, value: l.qty, onChange: (e) => patch(itemKey(l), 'qty', Number(e.target.value)) })),
-                h('td', null, h('input', { type: 'number', min: 0.01, max: 1, step: 0.01, value: l.discount, onChange: (e) => patch(itemKey(l), 'discount', Number(e.target.value)) })),
+                h('td', null, h('input', { className: 'presales-input', style: { width: 100 }, value: l.category || '', onChange: (e) => patch(itemKey(l), 'category', e.target.value) })),
+                h('td', null, h('input', { className: 'presales-input', style: { width: 90 }, value: l.brand || '', onChange: (e) => patch(itemKey(l), 'brand', e.target.value) })),
+                h('td', null, h('input', { className: 'presales-input', style: { width: 110 }, value: l.model || '', onChange: (e) => patch(itemKey(l), 'model', e.target.value) })),
+                h('td', null, h('input', { className: 'presales-input', style: { width: 55 }, value: l.unit || '', onChange: (e) => patch(itemKey(l), 'unit', e.target.value) })),
+                h('td', null, h('input', { type: 'number', min: 0, style: { width: 90 }, value: l.stdPrice, onChange: (e) => patch(itemKey(l), 'stdPrice', Number(e.target.value)) })),
+                h('td', null, h('input', { type: 'number', min: 0, style: { width: 60 }, value: l.qty, onChange: (e) => patch(itemKey(l), 'qty', Number(e.target.value)) })),
+                h('td', null, h('input', { type: 'number', min: 0.01, max: 1, step: 0.01, style: { width: 60 }, value: l.discount, onChange: (e) => patch(itemKey(l), 'discount', Number(e.target.value)) })),
+                h('td', null, h('input', { type: 'number', min: 0, max: 1, step: 0.01, style: { width: 60 }, value: l.taxRate ?? 0.13, onChange: (e) => patch(itemKey(l), 'taxRate', Number(e.target.value)) })),
                 h('td', null, money(gross)),
+                h('td', null, h('input', { className: 'presales-input', style: { width: 120 }, value: l.remark || '', onChange: (e) => patch(itemKey(l), 'remark', e.target.value) })),
                 h('td', null,
                   l.temp ? h('button', { className: 'presales-btn', type: 'button', onClick: () => void fillRfqPrice(l) }, '回填价') : null,
                   h('button', { className: 'presales-btn', type: 'button', onClick: () => remove(itemKey(l)) }, '移除')))
             }),
             tempOpen ? h('tr', { className: 'presales-draft' },
               h('td', null, h('input', { type: 'checkbox', checked: tempRfq, onChange: (e) => setTempRfq(e.target.checked) })),
+              h('td', null, '-'),
               h('td', null, h('input', { className: 'presales-input', placeholder: '临时产品名称', value: tempForm.name, onChange: (e) => setTempForm({ ...tempForm, name: e.target.value }) })),
+              h('td', null, h('input', { className: 'presales-input', style: { width: 160 }, value: tempForm.spec || '', onChange: (e) => setTempForm({ ...tempForm, spec: e.target.value }) })),
               h('td', null, h('select', { className: 'presales-select', value: tempForm.section || section, onChange: (e) => setTempForm({ ...tempForm, section: e.target.value }) },
                 (sections.length ? sections.map((x) => x.title) : [section || '产品报价']).map((t) => h('option', { key: t, value: t }, t)))),
-              h('td', null, h('input', { className: 'presales-input', style: { width: 60 }, value: tempForm.unit, onChange: (e) => setTempForm({ ...tempForm, unit: e.target.value }) })),
-              h('td', null, h('input', { type: 'number', min: 0, style: { width: 100 }, value: tempForm.price, onChange: (e) => setTempForm({ ...tempForm, price: e.target.value }) })),
+              h('td', null, h('input', { className: 'presales-input', style: { width: 100 }, value: tempForm.category || '', onChange: (e) => setTempForm({ ...tempForm, category: e.target.value }) })),
+              h('td', null, h('input', { className: 'presales-input', style: { width: 90 }, value: tempForm.brand, onChange: (e) => setTempForm({ ...tempForm, brand: e.target.value }) })),
+              h('td', null, h('input', { className: 'presales-input', style: { width: 110 }, value: tempForm.model, onChange: (e) => setTempForm({ ...tempForm, model: e.target.value }) })),
+              h('td', null, h('input', { className: 'presales-input', style: { width: 55 }, value: tempForm.unit, onChange: (e) => setTempForm({ ...tempForm, unit: e.target.value }) })),
+              h('td', null, h('input', { type: 'number', min: 0, style: { width: 90 }, value: tempForm.price, onChange: (e) => setTempForm({ ...tempForm, price: e.target.value }) })),
               h('td', null, h('input', { type: 'number', min: 0, style: { width: 60 }, value: tempForm.qty, onChange: (e) => setTempForm({ ...tempForm, qty: Number(e.target.value) }) })),
               h('td', null, '-'),
+              h('td', null, h('input', { type: 'number', min: 0, max: 1, step: 0.01, style: { width: 60 }, value: 0.13, readOnly: true })),
               h('td', null, money(round((Number(tempForm.price) || 0) * (Number(tempForm.qty) || 0) * 1.13, 2))),
+              h('td', null, h('input', { className: 'presales-input', style: { width: 120 }, value: tempForm.remark || '', onChange: (e) => setTempForm({ ...tempForm, remark: e.target.value }) })),
               h('td', null,
                 h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void addTemp() }, '保存'),
                 h('button', { className: 'presales-btn', type: 'button', onClick: () => setTempForm({ ...tempForm, expand: !tempForm.expand }) }, tempForm.expand ? '收起' : '更多'))) : null,
             tempOpen && tempForm.expand ? h('tr', { className: 'presales-draft-more' },
-              h('td', { colSpan: 9 },
+              h('td', { colSpan: 16 },
                 h('div', { className: 'presales-grid' },
                   h('label', null, h('span', { className: 'presales-label' }, '规格'), h('input', { className: 'presales-input', value: tempForm.spec, onChange: (e) => setTempForm({ ...tempForm, spec: e.target.value }) })),
                   h('label', null, h('span', { className: 'presales-label' }, '品牌'), h('input', { className: 'presales-input', value: tempForm.brand, onChange: (e) => setTempForm({ ...tempForm, brand: e.target.value }) })),
