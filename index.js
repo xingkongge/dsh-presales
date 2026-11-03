@@ -1136,10 +1136,11 @@ export function apply(ctx, rawConfig = {}) {
   }
 
   async function nextRfqNo() {
-    const rows = await list('rfq')
+    // 同时看头和明细：避免删了头但明细残留时复用同一个编号，导致新旧明细串单
+    const [headers, items] = await Promise.all([list('rfq'), list('rfqItems')])
     const year = new Date().getFullYear()
     let max = 0
-    for (const r of rows) {
+    for (const r of [...headers, ...items]) {
       const m = String(r['询价编号'] || '').match(/RFQ-(\d{4})-(\d+)/)
       if (m && Number(m[1]) === year) max = Math.max(max, Number(m[2]))
     }
