@@ -319,7 +319,10 @@ button.presales-badge{background:transparent;cursor:pointer}
         api('email_accounts').then((r) => {
           const list = r.accounts || []
           setMailAccounts(list)
-          if (!mailFrom && list.length) setMailFrom(list[0])
+          if (list.length) {
+            const last = localStorage.getItem('presales.lastRfqFrom') || ''
+            setMailFrom((prev) => (prev && list.includes(prev) ? prev : (list.includes(last) ? last : list[0])))
+          }
         }).catch(() => {})
       }, [])
       React.useEffect(() => {
@@ -698,7 +701,7 @@ button.presales-badge{background:transparent;cursor:pointer}
           h('div', { className: 'presales-grid', style: { marginTop: 8 } },
             h('label', null, h('span', { className: 'presales-label' }, '发件账号（默认上次）'),
               h('select', { className: 'presales-select', value: mailFrom, onChange: (e) => setMailFrom(e.target.value) },
-                h('option', { value: '' }, '使用默认账号'),
+                mailAccounts.length ? null : h('option', { value: '' }, '未检测到邮箱账号'),
                 mailAccounts.map((a) => h('option', { key: a, value: a }, a)))),
             h('label', null, h('span', { className: 'presales-label' }, '收件人（请确认）'),
               h('input', { className: 'presales-input', value: mailTo, onChange: (e) => setMailTo(e.target.value), placeholder: 'vendor@example.com' }))),
@@ -712,7 +715,12 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void markMailSent() }, '标记已发送'),
             mailQueue.length ? h('button', { className: 'presales-btn', type: 'button', onClick: () => nextMail() }, `下一封（剩 ${mailQueue.length}）`) : null,
             h('button', { className: 'presales-btn', type: 'button', onClick: () => { navigator.clipboard.writeText(`${mailPreview.subject}\n\n${mailPreview.text}`) } }, '复制主题+正文'),
-            h('a', { className: 'presales-btn', href: `mailto:?subject=${encodeURIComponent(mailPreview.subject || '')}&body=${encodeURIComponent(mailPreview.text || '')}` }, '打开邮件客户端'))) : null)
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => {
+              const body = String(mailPreview.text || '')
+              navigator.clipboard.writeText(`${mailPreview.subject}\n\n${body}`)
+              setDraftMsg('正文已复制；正在尝试打开邮件客户端')
+              window.location.href = `mailto:?subject=${encodeURIComponent(mailPreview.subject || '')}&body=${encodeURIComponent(body.slice(0, 1500))}`
+            } }, '打开邮件客户端'))) : null)
       }
 
       function renderRfqTab() {

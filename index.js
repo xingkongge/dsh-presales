@@ -1129,10 +1129,10 @@ export function apply(ctx, rawConfig = {}) {
     const accounts = []
     const list = health?.accounts || health?.checks || []
     for (const a of list) {
-      const name = a.name || a.account || a.label
-      if (name && !/邮箱配置|账号/.test(String(name))) accounts.push(String(name))
+      const raw = String(a.name || a.account || a.label || '').replace(/^账号\s*/, '').trim()
+      if (raw && raw !== '邮箱配置') accounts.push(raw)
     }
-    return { accounts: [...new Set(accounts)], raw: health }
+    return { accounts: [...new Set(accounts)], defaultAccount: accounts[0] || '', raw: health }
   }
 
   async function nextRfqNo() {
