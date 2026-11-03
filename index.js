@@ -1247,6 +1247,16 @@ export function apply(ctx, rawConfig = {}) {
     for (const qid of (ver['报价单'] || [])) await updateRecord('quotes', qid, { '不含税合计': untaxed, '税额合计': tax, '含税合计': gross })
   }
 
+  async function updateRfqHeader(id, payload = {}) {
+    const h = (await list('rfq')).find((x) => x._id === id || x['询价编号'] === id)
+    if (!h) throw new Error('询价单不存在')
+    const patch = {}
+    if (payload.vendorEmail !== undefined) patch['厂商邮箱'] = payload.vendorEmail
+    if (payload.vendor !== undefined) patch['厂商名称'] = payload.vendor
+    if (Object.keys(patch).length) await updateRecord('rfq', h._id, patch)
+    return { ok: true }
+  }
+
   async function applyRfqItemPrice(itemId, price) {
     const item = (await list('rfqItems')).find((x) => x._id === itemId)
     if (!item) throw new Error('询价明细不存在')
@@ -1766,6 +1776,9 @@ export function apply(ctx, rawConfig = {}) {
           }
           if (route === 'rfq_list') {
             try { return json(res, 200, { ok: true, items: await listRfqs() }) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'rfq_update' && req.method === 'POST') {
+            try { const body = await readBody(req); return json(res, 200, await updateRfqHeader(String(body.id || ''), body)) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
           }
           if (route === 'rfq_item_price' && req.method === 'POST') {
             try { const body = await readBody(req); return json(res, 200, await applyRfqItemPrice(String(body.itemId || ''), body.price)) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }

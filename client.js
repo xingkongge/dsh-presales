@@ -118,7 +118,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       }
 
       async function openRfq(no) {
-        try { const d = await api('rfq_detail?id=' + encodeURIComponent(no)); setRfqView(d); const p = {}; (d.items || []).forEach((it) => { p[it.id] = it['回复报价（含税）'] ?? '' }); setRfqPrices(p) }
+        try { const d = await api('rfq_detail?id=' + encodeURIComponent(no)); setRfqView(d); setRfqEmail(d.header['厂商邮箱'] || ''); const p = {}; (d.items || []).forEach((it) => { p[it.id] = it['回复报价（含税）'] ?? '' }); setRfqPrices(p) }
         catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
 
@@ -260,7 +260,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [sections, setSections] = React.useState([])
       const [section, setSection] = React.useState('')
       const [tempOpen, setTempOpen] = React.useState(false)
-      const [tempForm, setTempForm] = React.useState({ name: '', spec: '', brand: '', model: '', unit: '项', qty: 1, price: '', vendor: '', vendorEmail: '' })
+      const [tempForm, setTempForm] = React.useState({ name: '', spec: '', brand: '', model: '', unit: '项', qty: 1, price: '' })
       const [tempRfq, setTempRfq] = React.useState(true)
       const [mailPreview, setMailPreview] = React.useState(null)
       const [mailAccounts, setMailAccounts] = React.useState([])
@@ -271,6 +271,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [rfqs, setRfqs] = React.useState([])
       const [rfqView, setRfqView] = React.useState(null)
       const [rfqPrices, setRfqPrices] = React.useState({})
+      const [rfqEmail, setRfqEmail] = React.useState('')
       const [selected, setSelected] = React.useState({})
       const [mailQueue, setMailQueue] = React.useState([])
       const fileRef = React.useRef(null)
@@ -288,7 +289,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       }
 
       async function openRfq(no) {
-        try { const d = await api('rfq_detail?id=' + encodeURIComponent(no)); setRfqView(d); const p = {}; (d.items || []).forEach((it) => { p[it.id] = it['回复报价（含税）'] ?? '' }); setRfqPrices(p) }
+        try { const d = await api('rfq_detail?id=' + encodeURIComponent(no)); setRfqView(d); setRfqEmail(d.header['厂商邮箱'] || ''); const p = {}; (d.items || []).forEach((it) => { p[it.id] = it['回复报价（含税）'] ?? '' }); setRfqPrices(p) }
         catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
 
@@ -369,12 +370,11 @@ button.presales-badge{background:transparent;cursor:pointer}
           code: `TMP-${Date.now()}`, name: tempForm.name.trim(), spec: tempForm.spec, brand: tempForm.brand,
           model: tempForm.model, unit: tempForm.unit || '项', stdPrice: Number(tempForm.price) || 0,
           taxRate: 0.13, qty: Number(tempForm.qty) || 1, discount: 1, temp: true, section: tempForm.section || section,
-          vendor: tempForm.vendor || '', vendorEmail: tempForm.vendorEmail || '',
           uid: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         }
         setCart((prev) => [...prev, item])
         if (tempRfq) setSelected((prev) => ({ ...prev, [item.uid]: true }))
-        setTempForm({ name: '', spec: '', brand: '', model: '', unit: '项', qty: 1, price: '', vendor: '', vendorEmail: '', expand: false })
+        setTempForm({ name: '', spec: '', brand: '', model: '', unit: '项', qty: 1, price: '', expand: false })
         setTempOpen(false)
       }
 
@@ -430,7 +430,7 @@ button.presales-badge{background:transparent;cursor:pointer}
         if (!picked.length) { setMsg({ kind: 'err', text: '请先勾选要询价的临时产品' }); return }
         const groups = new Map()
         for (const l of picked) {
-          const key = (l.vendor || '').trim() || '未指定厂商'
+          const key = (l.brand || '').trim() || '未指定品牌'
           if (!groups.has(key)) groups.set(key, [])
           groups.get(key).push(l)
         }
@@ -440,7 +440,7 @@ button.presales-badge{background:transparent;cursor:pointer}
           try {
             const r = await api('rfq_create', { method: 'POST', body: JSON.stringify({
               opportunityNo: opp ? opp.no : '', opportunityName: opp ? opp.name : '',
-              vendor, vendorEmail: lines[0].vendorEmail || '', section,
+              vendor: vendor, section,
               items: lines.map((l) => ({
                 name: l.name, spec: l.spec, brand: l.brand, model: l.model, unit: l.unit,
                 qty: l.qty, targetPrice: l.stdPrice, lineId: itemKey(l),
@@ -674,6 +674,13 @@ button.presales-badge{background:transparent;cursor:pointer}
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
 
+      async function saveRfqEmail() {
+        try {
+          await api('rfq_update', { method: 'POST', body: JSON.stringify({ id: rfqView.header.id, vendorEmail: rfqEmail }) })
+          setMsg({ kind: 'ok', text: '厂商邮箱已保存' })
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+      }
+
       async function resendRfq() {
         try {
           const m = await api('rfq_mail?id=' + encodeURIComponent(rfqView.header.id))
@@ -826,7 +833,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               sections.map((x) => h('option', { key: x.title, value: x.title }, x.title))) : h('span', { className: 'presales-muted' }, '模板未识别到分节')),
           h('div', { className: 'presales-muted', style: { marginTop: 2 } }, '选分节后挂产品；明细行里也可改分节'),
           h('div', { className: 'presales-row', style: { marginTop: 8 } },
-            h('button', { className: 'presales-btn', type: 'button', onClick: () => { setTempOpen(!tempOpen); setTempForm({ name: '', spec: '', brand: '', model: '', unit: '项', qty: 1, price: '', vendor: '', vendorEmail: '' }) } }, tempOpen ? '取消新增' : '＋ 新增临时产品'),
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => { setTempOpen(!tempOpen); setTempForm({ name: '', spec: '', brand: '', model: '', unit: '项', qty: 1, price: '' }) } }, tempOpen ? '取消新增' : '＋ 新增临时产品'),
             h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void syncRfqReplies() }, '同步询价回复'),
             h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void batchMail() }, `生成询价单（${Object.values(selected).filter(Boolean).length} 项）`)),
 
@@ -838,7 +845,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               const gross = round(round(unit * l.qty, 2) * (1 + l.taxRate), 2)
               return h('tr', { key: itemKey(l) },
                 h('td', null, l.temp ? h('input', { type: 'checkbox', checked: Boolean(selected[itemKey(l)]), onChange: () => toggleSelect(itemKey(l)) }) : null),
-                h('td', null, l.name, l.temp ? h('span', { className: 'presales-badge' }, '临时') : null, h('div', { className: 'presales-muted' }, `${l.code}${l.vendor ? ' · ' + l.vendor : ''}${l.rfqNo ? ' · ' + l.rfqNo : ''}`)),
+                h('td', null, l.name, l.temp ? h('span', { className: 'presales-badge' }, '临时') : null, h('div', { className: 'presales-muted' }, `${l.code}${l.brand ? ' · ' + l.brand : ''}${l.rfqNo ? ' · ' + l.rfqNo : ''}`)),
                 h('td', null, h('select', { className: 'presales-select', style: { maxWidth: 180 }, value: l.section || section, onChange: (e) => patch(itemKey(l), 'section', e.target.value) },
                   (sections.length ? sections.map((x) => x.title) : [l.section || section || '产品报价']).map((t) => h('option', { key: t, value: t }, t)))),
                 h('td', null, l.unit),
@@ -847,8 +854,6 @@ button.presales-badge{background:transparent;cursor:pointer}
                 h('td', null, h('input', { type: 'number', min: 0.01, max: 1, step: 0.01, value: l.discount, onChange: (e) => patch(itemKey(l), 'discount', Number(e.target.value)) })),
                 h('td', null, money(gross)),
                 h('td', null,
-                  l.temp && !l.rfqId ? h('button', { className: 'presales-btn', type: 'button', onClick: () => void ensureRfq(l).then(() => setMsg({ kind: 'ok', text: '询价单已创建' })).catch((e) => setMsg({ kind: 'err', text: String(e.message || e) })) }, '建询价单') : null,
-                  l.temp ? h('button', { className: 'presales-btn', type: 'button', onClick: () => void openRfqMail(l) }, '询价邮件') : null,
                   l.temp ? h('button', { className: 'presales-btn', type: 'button', onClick: () => void fillRfqPrice(l) }, '回填价') : null,
                   h('button', { className: 'presales-btn', type: 'button', onClick: () => remove(itemKey(l)) }, '移除')))
             }),
@@ -870,9 +875,7 @@ button.presales-badge{background:transparent;cursor:pointer}
                 h('div', { className: 'presales-grid' },
                   h('label', null, h('span', { className: 'presales-label' }, '规格'), h('input', { className: 'presales-input', value: tempForm.spec, onChange: (e) => setTempForm({ ...tempForm, spec: e.target.value }) })),
                   h('label', null, h('span', { className: 'presales-label' }, '品牌'), h('input', { className: 'presales-input', value: tempForm.brand, onChange: (e) => setTempForm({ ...tempForm, brand: e.target.value }) })),
-                  h('label', null, h('span', { className: 'presales-label' }, '型号'), h('input', { className: 'presales-input', value: tempForm.model, onChange: (e) => setTempForm({ ...tempForm, model: e.target.value }) })),
-                  h('label', null, h('span', { className: 'presales-label' }, '厂商'), h('input', { className: 'presales-input', value: tempForm.vendor, onChange: (e) => setTempForm({ ...tempForm, vendor: e.target.value }) })),
-                  h('label', null, h('span', { className: 'presales-label' }, '厂商邮箱'), h('input', { className: 'presales-input', value: tempForm.vendorEmail, onChange: (e) => setTempForm({ ...tempForm, vendorEmail: e.target.value }) }))))) : null,
+                  h('label', null, h('span', { className: 'presales-label' }, '型号'), h('input', { className: 'presales-input', value: tempForm.model, onChange: (e) => setTempForm({ ...tempForm, model: e.target.value }) }))))) : null,
             )) : h('div', { className: 'presales-muted' }, '还没有明细；先从上面选分节、挂产品，或新增临时产品'),
           h('div', { className: 'presales-total', style: { marginTop: 12 } },
             h('span', null, '未税 ', h('b', null, money(totals.untaxed))),
@@ -881,23 +884,7 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('span', null, '毛利率 ', h('b', null, totals.margin == null ? '-' : (totals.margin * 100).toFixed(2) + '%'))),
           h('div', { className: 'presales-row', style: { marginTop: 12 } },
             h('button', { className: 'presales-btn primary', type: 'button', disabled: busy, onClick: () => void save() }, busy ? '保存中…' : '生成报价单'))),
-          h('section', { className: 'presales-card' },
-          h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
-            h('b', null, '询价单'),
-            h('div', { className: 'presales-row' },
-              rfqView ? h('button', { className: 'presales-btn', type: 'button', onClick: () => setRfqView(null) }, '← 返回列表') : null,
-              h('button', { className: 'presales-btn', type: 'button', onClick: () => void loadRfqs() }, '刷新'))),
-          rfqView ? h('div', { style: { marginTop: 8 } },
-            h('div', { className: 'presales-muted' }, `${rfqView.header['询价编号']} · ${rfqView.header['厂商名称'] || '未指定厂商'} · ${rfqView.header['询价状态'] || ''}`),
-            h('div', null, rfqView.items.map((it) => h('div', { key: it.id, className: 'presales-row', style: { justifyContent: 'space-between', marginTop: 6 } },
-              h('span', null, `${it['产品名称']} × ${it['数量']} ${it['单位'] || ''}`),
-              h('span', { className: 'presales-muted' }, `目标 ${it['目标价（含税）'] ?? '-'} · 回复 ${it['回复报价（含税）'] ?? '-'}`))))) :
-            (rfqs.length ? h('ul', { className: 'presales-list', style: { marginTop: 8 } },
-              rfqs.map((r) => h('li', { key: r.id, style: { cursor: 'pointer' }, onClick: () => void openRfq(r.no) },
-                h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
-                  h('span', null, h('b', null, r.no), ` ${r.vendor || '未指定厂商'}`, h('span', { className: 'presales-muted' }, ` · ${r.itemCount} 项`)),
-                  h('span', null, `${r.status || '-'}`))))) : h('div', { className: 'presales-muted' }, '还没有询价单；勾选临时产品后点“生成选中询价邮件”'))),
-        mailPreview ? h('section', { className: 'presales-card' },
+          mailPreview ? h('section', { className: 'presales-card' },
           h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
             h('b', null, `询价邮件 ${mailPreview.rfqNo || ''}`),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => setMailPreview(null) }, '关闭')),
