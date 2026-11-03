@@ -1247,6 +1247,31 @@ export function apply(ctx, rawConfig = {}) {
     for (const qid of (ver['报价单'] || [])) await updateRecord('quotes', qid, { '不含税合计': untaxed, '税额合计': tax, '含税合计': gross })
   }
 
+  async function applyRfqItemPrice(itemId, price) {
+    const item = (await list('rfqItems')).find((x) => x._id === itemId)
+    if (!item) throw new Error('询价明细不存在')
+    const unitPrice = Number(price) || 0
+    await updateRecord('rfqItems', item._id, { '回复报价（含税）': unitPrice })
+    const no = item['询价编号']
+    await updateRecord('rfq', (await list('rfq')).find((h) => h['询价编号'] === no)._id, { '询价状态': '已回复' })
+    const quoteItems = (await list('quoteItems')).filter((it) => it['询价编号'] === no && (it['产品名称'] === item['产品名称'] || String(it['备注'] || '').includes(item['关联报价行标识'] || '')))
+    let applied = 0
+    for (const it of quoteItems) {
+      const qty = Number(it['数量']) || 1
+      const rate = Number(it['税率']) || 0.13
+      const untaxed = round(unitPrice / (1 + rate), 4)
+      const untaxedSub = round(untaxed * qty, 2)
+      await updateRecord('quoteItems', it._id, {
+        '含税单价': unitPrice, '不含税单价': untaxed, '税额': round(untaxedSub * rate, 2),
+        '不含税小计': untaxedSub, '含税小计': round(unitPrice * qty, 2), '价格状态': '已核价',
+        '备注': [it['备注'], `询价明细回填 ${unitPrice}`].filter(Boolean).join('；'),
+      })
+      for (const vid of (it['报价版本'] || [])) await recalcVersionTotals(vid)
+      applied += 1
+    }
+    return { ok: true, applied }
+  }
+
   async function syncRfqReplies(days = 30) {
     const [headers, allItems] = await Promise.all([list('rfq'), list('rfqItems')])
     const pending = headers.filter((h) => h['询价状态'] !== '已核价')
@@ -1741,6 +1766,9 @@ export function apply(ctx, rawConfig = {}) {
           }
           if (route === 'rfq_list') {
             try { return json(res, 200, { ok: true, items: await listRfqs() }) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'rfq_item_price' && req.method === 'POST') {
+            try { const body = await readBody(req); return json(res, 200, await applyRfqItemPrice(String(body.itemId || ''), body.price)) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
           }
           if (route === 'rfq_detail') {
             try { return json(res, 200, { ok: true, ...(await rfqDetail(String(url.searchParams.get('id') || ''))) }) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
