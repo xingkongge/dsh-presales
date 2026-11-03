@@ -49,6 +49,7 @@ window.__ModuleLoader__.load({
 .presales-msg.ok{color:var(--dsw-alias-state-success-primary);border:1px solid currentColor}
 .presales-msg.err{color:var(--dsw-alias-state-error-primary);border:1px solid currentColor}
 .presales-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid currentColor}
+button.presales-badge{background:transparent;cursor:pointer}
 .presales-badge.ok{color:var(--dsw-alias-state-success-primary)}
 .presales-badge.err{color:var(--dsw-alias-state-error-primary)}
 .presales-badge.warn{color:var(--dsw-alias-state-warn-primary)}
@@ -257,6 +258,7 @@ window.__ModuleLoader__.load({
       const [mailFrom, setMailFrom] = React.useState(() => localStorage.getItem('presales.lastRfqFrom') || '')
       const [mailTo, setMailTo] = React.useState('')
       const [draftMsg, setDraftMsg] = React.useState('')
+      const [showCounts, setShowCounts] = React.useState(false)
       const [selected, setSelected] = React.useState({})
       const [mailQueue, setMailQueue] = React.useState([])
       const fileRef = React.useRef(null)
@@ -638,13 +640,16 @@ window.__ModuleLoader__.load({
             h('div', { className: 'presales-title' }, '报价工作台'),
             h('div', { className: 'presales-sub' }, '产品来自 WPS 产品清单；保存后写入报价管理（报价单 + V1 + 明细）')),
           h('div', { className: 'presales-row' },
+            status ? h('button', {
+              className: `presales-badge ${status.ok ? 'ok' : 'err'}`,
+              type: 'button', title: '点击查看产品/客户/报价数量',
+              onClick: () => setShowCounts(!showCounts),
+            }, status.ok ? 'WPS 已连接' : '未连接') : null,
+            showCounts && status ? h('span', { className: 'presales-muted' }, `产品 ${status.counts?.products ?? '-'} · 客户 ${status.counts?.customers ?? '-'} · 报价 ${status.counts?.quotes ?? '-'}`) : null,
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新', updates && updates.some((u) => u.hasUpdate) ? h('span', { className: 'presales-dot' }) : null),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
         h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('opp', '商机'), tabBtn('quote', '报价')),
         updatesOpen ? renderUpdateCard() : null,
-        status ? h('div', { className: 'presales-card presales-row' },
-          h('span', { className: `presales-badge ${status.ok ? 'ok' : 'err'}` }, status.ok ? 'WPS 已连接' : '未连接'),
-          h('span', { className: 'presales-muted' }, `产品 ${status.counts?.products ?? '-'} · 客户 ${status.counts?.customers ?? '-'} · 报价 ${status.counts?.quotes ?? '-'}`)) : null,
         h('section', { className: 'presales-card' },
           h('div', { className: 'presales-grid' },
             h('label', null, h('span', { className: 'presales-label' }, '客户'), h('select', {
