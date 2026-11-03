@@ -391,17 +391,30 @@ button.presales-badge{background:transparent;cursor:pointer}
       }
 
       async function batchMail() {
-        const lines = cart.filter((x) => x.temp && selected[itemKey(x)] && x.rfqId)
-        if (!lines.length) { setMsg({ kind: 'err', text: '请先勾选要询价的临时产品' }); return }
-        try {
-          const list = []
-          for (const l of lines) {
-            const m = await api('rfq_mail?id=' + encodeURIComponent(l.rfqId))
-            list.push({ ...m, lineKey: itemKey(l) })
-          }
-          if (!list.length) return
-          setMailPreview(list[0]); setMailQueue(list.slice(1)); setMailTo(list[0].to || ''); setDraftMsg('')
-        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+        const picked = cart.filter((x) => x.temp && selected[itemKey(x)])
+        if (!picked.length) { setMsg({ kind: 'err', text: '请先勾选要询价的临时产品' }); return }
+        const list = []
+        const errors = []
+        for (const l of picked) {
+          try {
+            let rfqId = l.rfqId
+            let rfqNo = l.rfqNo
+            if (!rfqId) {
+              const r = await api('rfq_create', { method: 'POST', body: JSON.stringify({
+                opportunityNo: opp ? opp.no : '', opportunityName: opp ? opp.name : '',
+                name: l.name, spec: l.spec, brand: l.brand, model: l.model, unit: l.unit,
+                qty: l.qty, targetPrice: l.stdPrice, section: l.section || section,
+              }) })
+              rfqId = r.id; rfqNo = r.no
+              setCart((prev) => prev.map((x) => itemKey(x) === itemKey(l) ? { ...x, rfqId, rfqNo } : x))
+            }
+            const m = await api('rfq_mail?id=' + encodeURIComponent(rfqId))
+            list.push({ ...m, lineKey: itemKey(l), rfqNo })
+          } catch (e) { errors.push(`${l.name}：${e.message || e}`) }
+        }
+        if (!list.length) { setMsg({ kind: 'err', text: `询价邮件生成失败：${errors.join('；')}` }); return }
+        setMailPreview(list[0]); setMailQueue(list.slice(1)); setMailTo(list[0].to || ''); setDraftMsg('')
+        if (errors.length) setMsg({ kind: 'err', text: `部分失败：${errors.join('；')}` })
       }
 
       function nextMail() {
@@ -731,7 +744,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               const gross = round(round(unit * l.qty, 2) * (1 + l.taxRate), 2)
               return h('tr', { key: itemKey(l) },
                 h('td', null, l.temp ? h('input', { type: 'checkbox', checked: Boolean(selected[itemKey(l)]), onChange: () => toggleSelect(itemKey(l)) }) : null),
-                h('td', null, l.name, l.temp ? h('span', { className: 'presales-badge' }, '临时') : null, h('div', { className: 'presales-muted' }, l.code)),
+                h('td', null, l.name, l.temp ? h('span', { className: 'presales-badge' }, '临时') : null, h('div', { className: 'presales-muted' }, `${l.code}${l.rfqNo ? ' · ' + l.rfqNo : ''}`)),
                 h('td', null, h('select', { className: 'presales-select', style: { maxWidth: 180 }, value: l.section || section, onChange: (e) => patch(itemKey(l), 'section', e.target.value) },
                   (sections.length ? sections.map((x) => x.title) : [l.section || section || '产品报价']).map((t) => h('option', { key: t, value: t }, t)))),
                 h('td', null, l.unit),
