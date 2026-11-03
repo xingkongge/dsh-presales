@@ -1129,10 +1129,15 @@ export function apply(ctx, rawConfig = {}) {
     const accounts = []
     const list = health?.accounts || health?.checks || []
     for (const a of list) {
-      const raw = String(a.name || a.account || a.label || '').replace(/^账号\s*/, '').trim()
-      if (raw && raw !== '邮箱配置') accounts.push(raw)
+      const name = String(a.name || a.account || a.label || '').replace(/^账号\s*/, '').trim()
+      if (!name || name === '邮箱配置') continue
+      const email = (String(a.detail || '').match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) || [''])[0]
+      const label = email ? `${name} · ${email}` : name
+      accounts.push({ name, email, label })
     }
-    return { accounts: [...new Set(accounts)], defaultAccount: accounts[0] || '', raw: health }
+    const uniq = []
+    for (const a of accounts) if (!uniq.some((x) => x.name === a.name)) uniq.push(a)
+    return { accounts: uniq, defaultAccount: uniq[0]?.name || '', raw: health }
   }
 
   async function nextRfqNo() {
@@ -1857,6 +1862,38 @@ export function apply(ctx, rawConfig = {}) {
             } catch (e) {
               return json(res, 400, { ok: false, error: String(e && e.message ? e.message : e) })
             }
+          }
+          if (route === 'bootstrap') {
+            const r = await ready()
+            if (r.error) return json(res, 200, { ok: false, error: r.error })
+            try {
+              const [products, customers, opportunities, quotes, templates, categories, modules] = await Promise.all([
+                list('products'), list('customers'), list('opportunities'), list('quotes'), list('quoteTemplates'), list('productCategories'), list('productModules'),
+              ])
+              const catById = new Map(categories.map((c) => [c._id, c['分类名称']]))
+              const norm = (v) => Array.isArray(v) ? v : (v ? [v] : [])
+              const ones = categories.filter((c) => c['层级'] === '一级')
+              const countL1 = new Map(); const countL2 = new Map()
+              for (const p of products) {
+                const l1 = catById.get((p['一级分类'] || [])[0]) || ''
+                const l2 = catById.get((p['二级分类'] || [])[0]) || ''
+                countL1.set(l1, (countL1.get(l1) || 0) + 1)
+                countL2.set(`${l1}||${l2}`, (countL2.get(`${l1}||${l2}`) || 0) + 1)
+              }
+              const tree = ones.map((c) => ({
+                id: c._id, name: c['分类名称'], count: countL1.get(c['分类名称']) || 0,
+                children: categories.filter((x) => x['层级'] === '二级' && norm(x['父记录']).includes(c._id))
+                  .map((x) => ({ id: x._id, name: x['分类名称'], count: countL2.get(`${c['分类名称']}||${x['分类名称']}`) || 0 })),
+              }))
+              return json(res, 200, {
+                ok: true,
+                status: { ok: true, counts: { products: products.length, customers: customers.length, opportunities: opportunities.length, quotes: quotes.length, quoteTemplates: templates.length } },
+                customers: customers.map((c) => ({ id: c._id, code: c['客户编号'] || '', name: c['客户名称'] || '', industry: c['行业'] || '', level: c['客户等级'] || '' })),
+                templates: templates.filter((t) => t['启用状态'] === '启用').map((t) => ({ name: t['模板名称'], type: t['模板类型'], default: Boolean(t['默认模板']), fileId: t['文件ID'] || '' })),
+                quotes: quotes.slice(-10).reverse().map((q) => ({ quoteNo: q['报价单号'], customerName: q['客户名称'] || '', status: q['状态'] || '', grossTotal: Number(q['含税合计']) || 0, version: q['当前版本'] || '', link: q['文件链接'] || '' })),
+                categories: tree,
+              })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
           }
           if (route === 'status') {
             const r = await ready()

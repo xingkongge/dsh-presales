@@ -295,33 +295,38 @@ button.presales-badge{background:transparent;cursor:pointer}
 
       async function load() {
         try {
-          const [s, cs, tpl, qs, sp, ct, tc] = await Promise.all([
-            api('status'), api('customers'), api('templates'), api('quotes'), api('skill_prompt').catch(() => ({ prompt: '' })), api('categories').catch(() => ({ tree: [] })), api('template_check').catch(() => null),
-          ])
-          setCats(ct.tree || [])
-          setTplNotice(tc && (tc.added?.length || tc.updates?.length || tc.missing?.length) ? tc : null)
-          if (sp && sp.prompt) setOppPrompt(sp.prompt)
-          setStatus(s); setCustomers(cs.items || [])
-          setTemplates(tpl.items || [])
-          setQuotes(qs.items || [])
-          const def = (tpl.items || []).find((x) => x.default) || (tpl.items || [])[0]
+          // 一次请求拿齐首页数据，避免多个 WPS 路由串行/重复拉表
+          const b = await api('bootstrap')
+          if (!b.ok) throw new Error(b.error || 'WPS 数据加载失败')
+          setStatus(b.status)
+          setCustomers(b.customers || [])
+          setTemplates(b.templates || [])
+          setQuotes(b.quotes || [])
+          setCats(b.categories || [])
+          const def = (b.templates || []).find((x) => x.default) || (b.templates || [])[0]
           if (def) setTemplate(def.name)
+          api('skill_prompt').then((sp) => { if (sp?.prompt) setOppPrompt(sp.prompt) }).catch(() => {})
+          // 模板文件检查很慢，放后台，不阻塞首屏
+          api('template_check').then((tc) => setTplNotice(tc && (tc.added?.length || tc.updates?.length || tc.missing?.length) ? tc : null)).catch(() => {})
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
-      React.useEffect(() => {
-        void load(); void checkUpdates()
-        // 打开面板时后台检查一次询价回复；有更新则刷新报价列表
-        api('rfq_sync', { method: 'POST', body: JSON.stringify({}) }).then((r) => {
-          if (r.updated && r.updated.length) void load()
-        }).catch(() => {})
-      }, [])
+      React.useEffect(() => { void load(); void checkUpdates() }, [])
+      React.useEffect(() => { if (tab === 'rfq') void loadRfqs() }, [tab])
       React.useEffect(() => {
         api('email_accounts').then((r) => {
-          const list = (r.accounts && r.accounts.length) ? r.accounts : (r.raw?.checks || []).map((c) => String(c.name || '').replace(/^账号\s*/, '')).filter((x) => x && x !== '邮箱配置')
+          let list = Array.isArray(r.accounts) ? r.accounts.map((a) => (typeof a === 'string' ? { name: a, email: '', label: a } : a)) : []
+          if (!list.length) {
+            list = (r.raw?.checks || []).map((c) => {
+              const name = String(c.name || '').replace(/^账号\s*/, '').trim()
+              const email = (String(c.detail || '').match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) || [''])[0]
+              return { name, email, label: email ? `${name} · ${email}` : name }
+            }).filter((x) => x.name && x.name !== '邮箱配置')
+          }
           setMailAccounts(list)
-          if (list.length) {
+          const names = list.map((x) => x.name)
+          if (names.length) {
             const last = localStorage.getItem('presales.lastRfqFrom') || ''
-            setMailFrom((prev) => (prev && list.includes(prev) ? prev : (list.includes(last) ? last : list[0])))
+            setMailFrom((prev) => (prev && names.includes(prev) ? prev : (names.includes(last) ? last : names[0])))
           }
         }).catch(() => {})
       }, [])
@@ -704,7 +709,7 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('label', null, h('span', { className: 'presales-label' }, '发件账号（默认上次）'),
               h('select', { className: 'presales-select', value: mailFrom, onChange: (e) => setMailFrom(e.target.value) },
                 mailAccounts.length ? null : h('option', { value: '' }, '未检测到邮箱账号'),
-                mailAccounts.map((a) => h('option', { key: a, value: a }, a)))),
+                mailAccounts.map((a) => h('option', { key: a.name, value: a.name }, a.label || a.name)))),
             h('label', null, h('span', { className: 'presales-label' }, '收件人（请确认）'),
               h('input', { className: 'presales-input', value: mailTo, onChange: (e) => setMailTo(e.target.value), placeholder: 'vendor@example.com' }))),
           h('div', { className: 'presales-label', style: { marginTop: 6 } }, '主题'),
