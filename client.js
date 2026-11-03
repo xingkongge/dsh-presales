@@ -422,6 +422,7 @@ button.presales-badge{background:transparent;cursor:pointer}
           setDraftMsg('已标记为已发送')
           if (mailPreview) setMailPreview({ ...mailPreview, sent: true })
           await loadRfqs()
+          if (rfqView) setRfqView(await api('rfq_detail?id=' + encodeURIComponent(rfqView.header['询价编号'])))
         } catch (e) { setDraftMsg(String(e.message || e)) }
       }
 
@@ -677,6 +678,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       async function saveRfqEmail() {
         try {
           await api('rfq_update', { method: 'POST', body: JSON.stringify({ id: rfqView.header.id, vendorEmail: rfqEmail }) })
+          setRfqView(await api('rfq_detail?id=' + encodeURIComponent(rfqView.header['询价编号'])))
           setMsg({ kind: 'ok', text: '厂商邮箱已保存' })
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
@@ -686,6 +688,31 @@ button.presales-badge{background:transparent;cursor:pointer}
           const m = await api('rfq_mail?id=' + encodeURIComponent(rfqView.header.id))
           setMailPreview(m); setMailTo(m.to || ''); setMailQueue([]); setDraftMsg('')
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+      }
+
+      function renderMailCard() {
+        return (mailPreview ? h('section', { className: 'presales-card' },
+          h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+            h('b', null, `询价邮件 ${mailPreview.rfqNo || ''}`),
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => setMailPreview(null) }, '关闭')),
+          h('div', { className: 'presales-grid', style: { marginTop: 8 } },
+            h('label', null, h('span', { className: 'presales-label' }, '发件账号（默认上次）'),
+              h('select', { className: 'presales-select', value: mailFrom, onChange: (e) => setMailFrom(e.target.value) },
+                h('option', { value: '' }, '使用默认账号'),
+                mailAccounts.map((a) => h('option', { key: a, value: a }, a)))),
+            h('label', null, h('span', { className: 'presales-label' }, '收件人（请确认）'),
+              h('input', { className: 'presales-input', value: mailTo, onChange: (e) => setMailTo(e.target.value), placeholder: 'vendor@example.com' }))),
+          h('div', { className: 'presales-label', style: { marginTop: 6 } }, '主题'),
+          h('input', { className: 'presales-input', readOnly: true, value: mailPreview.subject || '' }),
+          h('div', { className: 'presales-label', style: { marginTop: 6 } }, '正文'),
+          h('textarea', { className: 'presales-input', style: { minHeight: 180 }, readOnly: true, value: mailPreview.text || '' }),
+          draftMsg ? h('div', { className: 'presales-muted', style: { marginTop: 6 } }, draftMsg) : null,
+          h('div', { className: 'presales-row', style: { marginTop: 8 } },
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => void saveRfqDraft() }, '存为邮件草稿（不发送）'),
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => void markMailSent() }, '标记已发送'),
+            mailQueue.length ? h('button', { className: 'presales-btn', type: 'button', onClick: () => nextMail() }, `下一封（剩 ${mailQueue.length}）`) : null,
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => { navigator.clipboard.writeText(`${mailPreview.subject}\n\n${mailPreview.text}`) } }, '复制主题+正文'),
+            h('a', { className: 'presales-btn', href: `mailto:?subject=${encodeURIComponent(mailPreview.subject || '')}&body=${encodeURIComponent(mailPreview.text || '')}` }, '打开邮件客户端'))) : null)
       }
 
       function renderRfqTab() {
@@ -700,8 +727,12 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
               h('b', null, `询价单 ${rfqView.header['询价编号']}`),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => setRfqView(null) }, '← 返回列表')),
-            h('div', { className: 'presales-muted', style: { marginTop: 4 } }, `${rfqView.header['厂商名称'] || '未指定厂商'} · ${rfqView.header['询价状态'] || ''}`),
+            h('div', { className: 'presales-grid', style: { marginTop: 8 } },
+              h('label', null, h('span', { className: 'presales-label' }, '品牌/厂商'), h('input', { className: 'presales-input', value: rfqView.header['厂商名称'] || '', readOnly: true })),
+              h('label', null, h('span', { className: 'presales-label' }, '厂商邮箱'), h('input', { className: 'presales-input', value: rfqEmail, onChange: (e) => setRfqEmail(e.target.value) })),
+              h('label', null, h('span', { className: 'presales-label' }, '状态'), h('input', { className: 'presales-input', value: rfqView.header['询价状态'] || '', readOnly: true }))),
             h('div', { className: 'presales-row', style: { marginTop: 8 } },
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => void saveRfqEmail() }, '保存邮箱'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void resendRfq() }, '重发邮件'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void markMailSent() }, '标记已发送')),
             h('table', { className: 'presales-table', style: { marginTop: 8 } },
@@ -713,7 +744,9 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('span', null, h('b', null, r.no), ` ${r.vendor || '未指定厂商'}`, h('span', { className: 'presales-muted' }, ` · ${r.itemCount} 项`)),
             h('span', null, r.status || '-'))))
         return h('section', { className: 'presales-card' },
-          h('b', null, '询价单'),
+          h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+            h('b', null, '询价单'),
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => void loadRfqs() }, '刷新')),
           rows.length ? h('ul', { className: 'presales-list', style: { marginTop: 8 } }, rows) : h('div', { className: 'presales-muted', style: { marginTop: 8 } }, '还没有询价单；勾选临时产品后点“生成询价单”'))
       }
 
@@ -729,7 +762,8 @@ button.presales-badge{background:transparent;cursor:pointer}
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
           h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
           updatesOpen ? renderUpdateCard() : null,
-          renderRfqTab())
+          renderRfqTab(),
+          renderMailCard())
       }
 
       if (tab === 'opp') {
@@ -884,28 +918,8 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('span', null, '毛利率 ', h('b', null, totals.margin == null ? '-' : (totals.margin * 100).toFixed(2) + '%'))),
           h('div', { className: 'presales-row', style: { marginTop: 12 } },
             h('button', { className: 'presales-btn primary', type: 'button', disabled: busy, onClick: () => void save() }, busy ? '保存中…' : '生成报价单'))),
-          mailPreview ? h('section', { className: 'presales-card' },
-          h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
-            h('b', null, `询价邮件 ${mailPreview.rfqNo || ''}`),
-            h('button', { className: 'presales-btn', type: 'button', onClick: () => setMailPreview(null) }, '关闭')),
-          h('div', { className: 'presales-grid', style: { marginTop: 8 } },
-            h('label', null, h('span', { className: 'presales-label' }, '发件账号（默认上次）'),
-              h('select', { className: 'presales-select', value: mailFrom, onChange: (e) => setMailFrom(e.target.value) },
-                h('option', { value: '' }, '使用默认账号'),
-                mailAccounts.map((a) => h('option', { key: a, value: a }, a)))),
-            h('label', null, h('span', { className: 'presales-label' }, '收件人（请确认）'),
-              h('input', { className: 'presales-input', value: mailTo, onChange: (e) => setMailTo(e.target.value), placeholder: 'vendor@example.com' }))),
-          h('div', { className: 'presales-label', style: { marginTop: 6 } }, '主题'),
-          h('input', { className: 'presales-input', readOnly: true, value: mailPreview.subject || '' }),
-          h('div', { className: 'presales-label', style: { marginTop: 6 } }, '正文'),
-          h('textarea', { className: 'presales-input', style: { minHeight: 180 }, readOnly: true, value: mailPreview.text || '' }),
-          draftMsg ? h('div', { className: 'presales-muted', style: { marginTop: 6 } }, draftMsg) : null,
-          h('div', { className: 'presales-row', style: { marginTop: 8 } },
-            h('button', { className: 'presales-btn', type: 'button', onClick: () => void saveRfqDraft() }, '存为邮件草稿（不发送）'),
-            h('button', { className: 'presales-btn', type: 'button', onClick: () => void markMailSent() }, '标记已发送'),
-            mailQueue.length ? h('button', { className: 'presales-btn', type: 'button', onClick: () => nextMail() }, `下一封（剩 ${mailQueue.length}）`) : null,
-            h('button', { className: 'presales-btn', type: 'button', onClick: () => { navigator.clipboard.writeText(`${mailPreview.subject}\n\n${mailPreview.text}`) } }, '复制主题+正文'),
-            h('a', { className: 'presales-btn', href: `mailto:?subject=${encodeURIComponent(mailPreview.subject || '')}&body=${encodeURIComponent(mailPreview.text || '')}` }, '打开邮件客户端'))) : null,
+
+        renderMailCard(),
         msg ? h('div', { className: `presales-msg ${msg.kind === 'ok' ? 'ok' : 'err'}` },
           msg.text,
           msg.link ? h('a', { href: msg.link, target: '_blank', rel: 'noreferrer', style: { marginLeft: 10, color: 'inherit', textDecoration: 'underline' } }, '打开 / 下载') : null) : null,
