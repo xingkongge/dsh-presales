@@ -317,7 +317,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       }, [])
       React.useEffect(() => {
         api('email_accounts').then((r) => {
-          const list = r.accounts || []
+          const list = (r.accounts && r.accounts.length) ? r.accounts : (r.raw?.checks || []).map((c) => String(c.name || '').replace(/^账号\s*/, '')).filter((x) => x && x !== '邮箱配置')
           setMailAccounts(list)
           if (list.length) {
             const last = localStorage.getItem('presales.lastRfqFrom') || ''
@@ -430,8 +430,9 @@ button.presales-badge{background:transparent;cursor:pointer}
       }
 
       async function batchMail() {
+        setBusy(true); setMsg({ kind: 'ok', text: '正在生成询价单…' })
         const picked = cart.filter((x) => x.temp && selected[itemKey(x)])
-        if (!picked.length) { setMsg({ kind: 'err', text: '请先勾选要询价的临时产品' }); return }
+        if (!picked.length) { setMsg({ kind: 'err', text: '请先勾选要询价的临时产品' }); setBusy(false); return }
         const groups = new Map()
         for (const l of picked) {
           const key = (l.brand || '').trim() || '未指定品牌'
@@ -444,20 +445,21 @@ button.presales-badge{background:transparent;cursor:pointer}
           try {
             const r = await api('rfq_create', { method: 'POST', body: JSON.stringify({
               opportunityNo: opp ? opp.no : '', opportunityName: opp ? opp.name : '',
-              vendor: vendor, section,
+              vendor: vendor, section, withMail: true,
               items: lines.map((l) => ({
                 name: l.name, spec: l.spec, brand: l.brand, model: l.model, unit: l.unit,
                 qty: l.qty, targetPrice: l.stdPrice, lineId: itemKey(l),
               })),
             }) })
             setCart((prev) => prev.map((x) => lines.some((l) => itemKey(l) === itemKey(x)) ? { ...x, rfqId: r.id, rfqNo: r.no } : x))
-            const m = await api('rfq_mail?id=' + encodeURIComponent(r.id))
-            list.push({ ...m, rfqNo: r.no, vendor, lineKey: itemKey(lines[0]) })
+            if (r.mail) list.push({ ...r.mail, vendor, lineKey: itemKey(lines[0]) })
+            else { const m = await api('rfq_mail?id=' + encodeURIComponent(r.id)); list.push({ ...m, rfqNo: r.no, vendor, lineKey: itemKey(lines[0]) }) }
           } catch (e) { errors.push(`${vendor}：${e.message || e}`) }
         }
-        if (!list.length) { setMsg({ kind: 'err', text: `询价单创建失败：${errors.join('；')}` }); return }
+        if (!list.length) { setMsg({ kind: 'err', text: `询价单创建失败：${errors.join('；')}` }); setBusy(false); return }
         setMailPreview(list[0]); setMailQueue(list.slice(1)); setMailTo(list[0].to || ''); setDraftMsg('')
         if (errors.length) setMsg({ kind: 'err', text: `部分失败：${errors.join('；')}` })
+        setBusy(false)
         void loadRfqs()
       }
 
@@ -716,10 +718,9 @@ button.presales-badge{background:transparent;cursor:pointer}
             mailQueue.length ? h('button', { className: 'presales-btn', type: 'button', onClick: () => nextMail() }, `下一封（剩 ${mailQueue.length}）`) : null,
             h('button', { className: 'presales-btn', type: 'button', onClick: () => { navigator.clipboard.writeText(`${mailPreview.subject}\n\n${mailPreview.text}`) } }, '复制主题+正文'),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => {
-              const body = String(mailPreview.text || '')
-              navigator.clipboard.writeText(`${mailPreview.subject}\n\n${body}`)
-              setDraftMsg('正文已复制；正在尝试打开邮件客户端')
-              window.location.href = `mailto:?subject=${encodeURIComponent(mailPreview.subject || '')}&body=${encodeURIComponent(body.slice(0, 1500))}`
+              api('open_mailto', { method: 'POST', body: JSON.stringify({ subject: mailPreview.subject || '', text: mailPreview.text || '' }) })
+                .then(() => setDraftMsg('已调用系统默认邮件客户端'))
+                .catch((e) => setDraftMsg(`打开失败：${e.message || e}`))
             } }, '打开邮件客户端'))) : null)
       }
 

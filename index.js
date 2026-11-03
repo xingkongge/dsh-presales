@@ -1182,7 +1182,19 @@ export function apply(ctx, rawConfig = {}) {
       return c
     })
     if (rows.length) await create('rfqItems', rows)
-    return { id, no, itemCount: rows.length, vendor: payload.vendor || '' }
+    const result = { id, no, itemCount: rows.length, vendor: payload.vendor || '' }
+    if (payload.withMail) {
+      try {
+        const mail = buildRfqMail({
+          rfq: { ...header, items: items.map((it) => ({ name: it.name, spec: it.spec, brand: it.brand, model: it.model, unit: it.unit, qty: it.qty, targetPrice: it.targetPrice, note: it.note })) },
+          opportunity: { no: payload.opportunityNo, name: payload.opportunityName },
+          sender: { name: '' },
+          recipients: payload.vendorEmail || '',
+        })
+        result.mail = { ...mail, id, to: payload.vendorEmail || '', rfqNo: no, itemCount: rows.length }
+      } catch (e) { result.mailError = String(e.message || e) }
+    }
+    return result
   }
 
   async function listRfqs() {
@@ -1777,6 +1789,16 @@ export function apply(ctx, rawConfig = {}) {
           }
           if (route === 'rfq_list') {
             try { return json(res, 200, { ok: true, items: await listRfqs() }) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'open_mailto' && req.method === 'POST') {
+            try {
+              const body = await readBody(req)
+              const url = `mailto:?subject=${encodeURIComponent(String(body.subject || ''))}&body=${encodeURIComponent(String(body.text || '').slice(0, 1500))}`
+              const cmd = process.platform === 'darwin' ? 'open' : (process.platform === 'win32' ? 'cmd' : 'xdg-open')
+              const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url]
+              await new Promise((resolve, reject) => execFile(cmd, args, { timeout: 10000 }, (err) => err ? reject(err) : resolve()))
+              return json(res, 200, { ok: true })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
           }
           if (route === 'rfq_update' && req.method === 'POST') {
             try { const body = await readBody(req); return json(res, 200, await updateRfqHeader(String(body.id || ''), body)) } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }) }
