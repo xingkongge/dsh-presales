@@ -390,6 +390,26 @@ button.presales-badge{background:transparent;cursor:pointer}
         setSelected((prev) => ({ ...prev, [key]: !prev[key] }))
       }
 
+      async function ensureRfq(line) {
+        if (line.rfqId) return line.rfqId
+        const r = await api('rfq_create', { method: 'POST', body: JSON.stringify({
+          opportunityNo: opp ? opp.no : '', opportunityName: opp ? opp.name : '',
+          name: line.name, spec: line.spec, brand: line.brand, model: line.model, unit: line.unit,
+          qty: line.qty, targetPrice: line.stdPrice, section: line.section || section,
+        }) })
+        setCart((prev) => prev.map((x) => itemKey(x) === itemKey(line) ? { ...x, rfqId: r.id, rfqNo: r.no } : x))
+        return r.id
+      }
+
+      async function markMailSent() {
+        if (!mailPreview?.id) return
+        try {
+          await api('rfq_sent', { method: 'POST', body: JSON.stringify({ id: mailPreview.id, sender: mailFrom, sentAt: new Date().toISOString().slice(0, 10) }) })
+          setDraftMsg('已标记为已发送')
+          setMailPreview({ ...mailPreview, sent: true })
+        } catch (e) { setDraftMsg(String(e.message || e)) }
+      }
+
       async function batchMail() {
         const picked = cart.filter((x) => x.temp && selected[itemKey(x)])
         if (!picked.length) { setMsg({ kind: 'err', text: '请先勾选要询价的临时产品' }); return }
@@ -397,19 +417,9 @@ button.presales-badge{background:transparent;cursor:pointer}
         const errors = []
         for (const l of picked) {
           try {
-            let rfqId = l.rfqId
-            let rfqNo = l.rfqNo
-            if (!rfqId) {
-              const r = await api('rfq_create', { method: 'POST', body: JSON.stringify({
-                opportunityNo: opp ? opp.no : '', opportunityName: opp ? opp.name : '',
-                name: l.name, spec: l.spec, brand: l.brand, model: l.model, unit: l.unit,
-                qty: l.qty, targetPrice: l.stdPrice, section: l.section || section,
-              }) })
-              rfqId = r.id; rfqNo = r.no
-              setCart((prev) => prev.map((x) => itemKey(x) === itemKey(l) ? { ...x, rfqId, rfqNo } : x))
-            }
+            const rfqId = await ensureRfq(l)
             const m = await api('rfq_mail?id=' + encodeURIComponent(rfqId))
-            list.push({ ...m, lineKey: itemKey(l), rfqNo })
+            list.push({ ...m, lineKey: itemKey(l) })
           } catch (e) { errors.push(`${l.name}：${e.message || e}`) }
         }
         if (!list.length) { setMsg({ kind: 'err', text: `询价邮件生成失败：${errors.join('；')}` }); return }
@@ -753,6 +763,7 @@ button.presales-badge{background:transparent;cursor:pointer}
                 h('td', null, h('input', { type: 'number', min: 0.01, max: 1, step: 0.01, value: l.discount, onChange: (e) => patch(itemKey(l), 'discount', Number(e.target.value)) })),
                 h('td', null, money(gross)),
                 h('td', null,
+                  l.temp && !l.rfqId ? h('button', { className: 'presales-btn', type: 'button', onClick: () => void ensureRfq(l).then(() => setMsg({ kind: 'ok', text: '询价单已创建' })).catch((e) => setMsg({ kind: 'err', text: String(e.message || e) })) }, '建询价单') : null,
                   l.temp ? h('button', { className: 'presales-btn', type: 'button', onClick: () => void openRfqMail(l) }, '询价邮件') : null,
                   l.temp ? h('button', { className: 'presales-btn', type: 'button', onClick: () => void fillRfqPrice(l) }, '回填价') : null,
                   h('button', { className: 'presales-btn', type: 'button', onClick: () => remove(itemKey(l)) }, '移除')))
@@ -802,6 +813,7 @@ button.presales-badge{background:transparent;cursor:pointer}
           draftMsg ? h('div', { className: 'presales-muted', style: { marginTop: 6 } }, draftMsg) : null,
           h('div', { className: 'presales-row', style: { marginTop: 8 } },
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void saveRfqDraft() }, '存为邮件草稿（不发送）'),
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => void markMailSent() }, '标记已发送'),
             mailQueue.length ? h('button', { className: 'presales-btn', type: 'button', onClick: () => nextMail() }, `下一封（剩 ${mailQueue.length}）`) : null,
             h('button', { className: 'presales-btn', type: 'button', onClick: () => { navigator.clipboard.writeText(`${mailPreview.subject}\n\n${mailPreview.text}`) } }, '复制主题+正文'),
             h('a', { className: 'presales-btn', href: `mailto:?subject=${encodeURIComponent(mailPreview.subject || '')}&body=${encodeURIComponent(mailPreview.text || '')}` }, '打开邮件客户端'))) : null,
