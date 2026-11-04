@@ -965,7 +965,7 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('div', { className: 'presales-label', style: { marginTop: 12 } }, `关联商机（${custDetail.opportunities.length}）`),
             custDetail.opportunities.length ? h('ul', { className: 'presales-list' }, custDetail.opportunities.map((o) => h('li', { key: o._id },
               h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
-                h('span', null, h('b', null, o['商机编号']), ` ${o['商机名称']}`), h('span', null, `${o['阶段'] || ''} · ${o['金额'] || 0} 万`))))) : h('div', { className: 'presales-muted' }, '暂无关联商机'))
+                h('span', null, h('b', null, o['商机编号']), ` ${o['商机名称']}`), h('span', null, `${o['阶段'] || ''} · ${o['商机金额万元'] || 0} 万`))))) : h('div', { className: 'presales-muted' }, '暂无关联商机'))
         }
         const q = custQuery.trim().toLowerCase()
         const industries = [...new Set(customers.map((c) => c.industryCategory).filter(Boolean))]

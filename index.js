@@ -1990,7 +1990,11 @@ for (const [idx, it] of (body.items || []).entries()) {
               const c = rows.find((x) => x._id === key || x['客户编号'] === key || x['客户名称'] === key)
               if (!c) return json(res, 404, { ok: false, error: '客户不存在' })
               const [opps, quotes] = await Promise.all([list('opportunities'), list('quotes')])
-              const relatedOpps = opps.filter((o) => o['客户编号'] === c['客户编号'] || o['客户名称'] === c['客户名称'])
+              const relatedOpps = opps.filter((o) => {
+                const sameName = !!o['客户名称'] && o['客户名称'] === c['客户名称']
+                const sameCode = o['客户编号'] === c['客户编号'] && (!o['客户名称'] || o['客户名称'] === c['客户名称'])
+                return sameName || sameCode
+              })
               const relatedQuotes = quotes.filter((q) => q['客户名称'] === c['客户名称'] || q['客户编号'] === c['客户编号'])
               return json(res, 200, { ok: true, customer: c, opportunities: relatedOpps, quotes: relatedQuotes })
             } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
