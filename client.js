@@ -100,7 +100,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       return { untaxed, tax, gross, profit, margin: untaxed > 0 ? profit / untaxed : null }
     }
 
-    function OppTab({ onQuote, onReload }) {
+    function OppTab({ onQuote, onReload, onNewOpp }) {
       const [items, setItems] = React.useState([])
       const [board, setBoard] = React.useState(null)
       const [keyword, setKeyword] = React.useState('')
@@ -213,25 +213,20 @@ button.presales-badge{background:transparent;cursor:pointer}
 
       return h('div', null,
         h('section', { className: 'presales-card' },
-          h('div', { className: 'presales-row' },
-            h('input', { className: 'presales-input', style: { maxWidth: 300 }, placeholder: '搜商机名称/客户/编号', value: keyword, onChange: (e) => setKeyword(e.target.value), onKeyDown: (e) => { if (e.key === 'Enter') void load() } }),
-            h('select', { className: 'presales-select', style: { maxWidth: 150 }, value: stage, onChange: (e) => { setStage(e.target.value); setTimeout(() => void load(), 0) } },
-              h('option', { value: '' }, '全部阶段'), STAGES.map((s) => h('option', { key: s, value: s }, s))),
-            h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '查询'))),
-        board ? h('section', { className: 'presales-card' },
-          h('div', { className: 'presales-total' },
-            h('span', null, '商机 ', h('b', null, board.total)),
-            h('span', null, '总金额 ', h('b', null, board.amount.toFixed(0)), ' 万'),
-            h('span', null, '赢单 ', h('b', null, board.won)),
-            h('span', null, '赢单率 ', h('b', null, board.total ? ((board.won / board.total) * 100).toFixed(0) + '%' : '-'))),
-          h('div', { className: 'presales-muted', style: { marginTop: 8 } }, board.stages.map((s) => `${s.name} ${s.n}/${s.amount.toFixed(0)}万`).join(' · '))) : null,
-        h('section', { className: 'presales-card' },
-          items.length ? h('ul', { className: 'presales-list' }, items.map((o) => h('li', { key: o.id, style: { cursor: 'pointer' }, onClick: () => void open(o.no) },
-            h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
-              h('span', null, h('b', null, o.no), ` ${o.name}`, h('span', { className: 'presales-muted' }, ` · ${o.customerName}`)),
-              h('span', null, `${o.stage} · ${o.amount} 万`))))) : h('div', { className: 'presales-muted' }, '没有商机')),
-
-
+          h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+            h('div', { className: 'presales-row' },
+              h('input', { className: 'presales-input', style: { maxWidth: 260 }, placeholder: '搜商机名称/客户/编号', value: keyword, onChange: (e) => setKeyword(e.target.value), onKeyDown: (e) => { if (e.key === 'Enter') void load() } }),
+              h('select', { className: 'presales-select', style: { maxWidth: 130 }, value: stage, onChange: (e) => { setStage(e.target.value); setTimeout(() => void load(), 0) } },
+                h('option', { value: '' }, '全部阶段'), STAGES.map((s) => h('option', { key: s, value: s }, s))),
+              h('span', { className: 'presales-muted' }, `共 ${items.length} 个商机`)),
+            h('button', { className: 'presales-btn primary', type: 'button', onClick: () => onNewOpp && onNewOpp() }, '新建商机（对话）')),
+          board ? h('div', { className: 'presales-muted', style: { marginTop: 6 } },
+            `总金额 ${board.amount.toFixed(0)} 万 · 赢单 ${board.won} · 赢单率 ${board.total ? ((board.won / board.total) * 100).toFixed(0) + '%' : '-'}`) : null,
+          h('table', { className: 'presales-table', style: { marginTop: 8 } },
+            h('thead', null, h('tr', null, ['商机名称', '编号', '客户', '阶段', '金额(万)', '预计落单'].map((t) => h('th', { key: t }, t)))),
+            h('tbody', null, items.map((o) => h('tr', { key: o.id, style: { cursor: 'pointer' }, onClick: () => void open(o.no) },
+              h('td', null, h('b', null, o.name)), h('td', null, o.no), h('td', null, o.customerName || '-'),
+              h('td', null, o.stage || '-'), h('td', null, o.amount ?? 0), h('td', null, o.expected || '-')))))),
         msg ? h('div', { className: `presales-msg ${msg.kind === 'ok' ? 'ok' : 'err'}` }, msg.text) : null)
     }
 
@@ -881,13 +876,12 @@ button.presales-badge{background:transparent;cursor:pointer}
                 onClick: () => setShowCounts(!showCounts),
               }, status.ok ? 'WPS 已连接' : '未连接') : null,
               showCounts && status ? h('span', { className: 'presales-muted' }, `产品 ${status.counts?.products ?? '-'} · 客户 ${status.counts?.customers ?? '-'} · 报价 ${status.counts?.quotes ?? '-'}`) : null,
-              h('button', { className: 'presales-btn', type: 'button', onClick: () => void newOppChat() }, '新建商机（对话）'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新', updates && updates.some((u) => u.hasUpdate) ? h('span', { className: 'presales-dot' }) : null),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
           h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
           updatesOpen ? renderUpdateCard() : null,
           chatNotice ? h('div', { className: 'presales-msg ok' }, chatNotice) : null,
-          h(OppTab, { onQuote: () => setTab('quote') }))
+          h(OppTab, { onQuote: () => setTab('quote'), onNewOpp: () => void newOppChat() }))
       }
 
       return h('div', { className: 'presales-panel' },
@@ -902,7 +896,6 @@ button.presales-badge{background:transparent;cursor:pointer}
               onClick: () => setShowCounts(!showCounts),
             }, status.ok ? 'WPS 已连接' : '未连接') : null,
             showCounts && status ? h('span', { className: 'presales-muted' }, `产品 ${status.counts?.products ?? '-'} · 客户 ${status.counts?.customers ?? '-'} · 报价 ${status.counts?.quotes ?? '-'}`) : null,
-            h('button', { className: 'presales-btn', type: 'button', onClick: () => void newOppChat() }, '新建商机（对话）'),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新', updates && updates.some((u) => u.hasUpdate) ? h('span', { className: 'presales-dot' }) : null),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
         h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
