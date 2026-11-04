@@ -251,7 +251,7 @@ button.presales-badge{background:transparent;cursor:pointer}
                 h('span', null, h('b', null, q.quoteNo), ` 当前 ${q.version} · ${q.status}`),
                 h('span', null, q.link ? h('a', { href: q.link, target: '_blank', rel: 'noreferrer', style: { marginRight: 10 } }, '打开最新版') : null, `含税 ${money(q.grossTotal)}`)),
               q.versions && q.versions.length ? h('div', { className: 'presales-muted', style: { marginTop: 4 } },
-                q.versions.map((v) => h('div', { key: v.version }, `${v.version} · ${v.status || ''} · 含税 ${money(v.grossTotal)}${v.change ? ` · ${v.change}` : ''}`))) : null))) : h('div', { className: 'presales-muted' }, '暂无报价')),
+                q.versions.map((v) => h('div', { key: v.version }, `${v.shortVersion || v.version} · ${v.status || ''} · 含税 ${money(v.grossTotal)}${v.change ? ` · ${v.change}` : ''} `, v.link ? h('a', { href: v.link, target: '_blank', rel: 'noreferrer' }, '打开该版本') : null))) : null))) : h('div', { className: 'presales-muted' }, '暂无报价')),
           h('section', { className: 'presales-card' },
             h('div', { className: 'presales-muted', style: { marginBottom: 6 } }, `跟进记录（${detail.followups.length}）`),
             detail.followups.length ? h('ul', { className: 'presales-list' }, detail.followups.map((f) => h('li', { key: f.no },

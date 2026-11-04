@@ -1824,7 +1824,11 @@ for (const [idx, it] of (body.items || []).entries()) {
             const qs = quotes.filter((q) => q['商机编号'] === no).map((q) => ({
               quoteNo: q['报价单号'], status: q['状态'], version: q['当前版本'], grossTotal: Number(q['含税合计']) || 0,
               link: q['文件链接'] || '', updated: String(q['更新时间'] || '').slice(0, 10),
-              versions: versions.filter((v) => (v['报价单'] || []).includes(q._id)).map((v) => ({ version: v['版本标识'], status: v['状态'], grossTotal: Number(v['含税合计']) || 0, change: v['变更说明'] || '' })),
+              versions: versions.filter((v) => (v['报价单'] || []).includes(q._id)).map((v) => {
+                const shortVer = String(v['版本标识'] || '').replace(`${q['报价单号']}-`, '')
+                const doc = documents.find((d) => d['类型'] === '报价单' && (String(d['产物编号'] || '').includes(`${q['报价单号']}-${shortVer}`) || (String(d['版本'] || '') === shortVer && String(d['标题'] || '').includes(q['报价单号']))))
+                return { version: v['版本标识'], shortVersion: shortVer, status: v['状态'], grossTotal: Number(v['含税合计']) || 0, change: v['变更说明'] || '', link: doc ? (doc['溯源'] || '') : '' }
+              }),
             }))
             const docs = documents.filter((d) => d['商机编号'] === no).map((d) => ({ no: d['产物编号'], title: d['标题'], type: d['类型'], version: d['版本'], link: d['溯源'] || '', fileName: d['文件名'] || '' }))
             return json(res, 200, { ok: true, item: {
