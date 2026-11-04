@@ -887,7 +887,7 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('label', null, h('span', { className: 'presales-label' }, '客户简介'),
               h('textarea', { className: 'presales-input', style: { minHeight: 70 }, value: custForm['客户简介'] || '', onChange: (e) => setCustForm({ ...custForm, '客户简介': e.target.value }) })),
             msg ? h('div', { className: `presales-msg ${msg.kind === 'ok' ? 'ok' : 'err'}` }, msg.text) : null,
-            lookupSources.length ? h('div', { className: 'presales-muted', style: { marginTop: 6 } }, '来源：' + lookupSources.map((x) => x.title || x.url).join(' / ')) : null,
+            lookupSources.length ? h('div', { className: 'presales-muted', style: { marginTop: 6 } }, '来源：' + lookupSources.map((x) => { try { const host = new URL(x.url).hostname.replace(/^www\./, ''); return (x.title && x.title.length <= 30) ? x.title + '（' + host + '）' : host } catch { return x.url } }).join(' / ')) : null,
             h('div', { className: 'presales-row', style: { marginTop: 8 } },
               h('button', { className: 'presales-btn primary', type: 'button', disabled: lookupBusy, onClick: () => void saveCustomer() }, lookupBusy ? '查询中…' : '保存')))
         }

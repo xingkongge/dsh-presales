@@ -2011,13 +2011,14 @@ for (const [idx, it] of (body.items || []).entries()) {
                 }
               } catch (e) { return json(res, 500, { ok: false, error: `联网搜索不可用：${e.message}` }) }
               const sources = (searched.sources || []).slice(0, 5).map((x) => ({ title: x.title, url: x.url, snippet: x.snippet || '' }))
-              const text = [searched.answer || searched.content || '', ...sources.map((x) => x.snippet || '')].join('\n')
+              const text = [searched.answer || searched.content || '', ...sources.map((x) => `${x.title || ''}\n${x.snippet || ''}`)].join('\n')
               const pick = (re) => { const m = text.match(re); return m ? m[1].trim().replace(/[，,。；;]$/, '') : '' }
               const fields = {
                 '法定代表人': pick(/法定代表人[：:\s]*([^\s，,。；;\n]{2,12})/),
                 '注册资本': pick(/注册资本[：:\s]*([0-9.,]+[万亿]?[元人民币]*)/),
                 '成立时间': pick(/成立(?:日期|时间)[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}日?)/),
-                '地址': pick(/(?:注册地址|地址)[：:\s]*([^\n，,。；;]{6,80})/),
+                '地址': pick(/(?:注册地址|地址)[：:\s]*为?([^\n，,。；;]{6,80})/),
+                '行业门类二级': pick(/所属行业(?:为)?([^，,。；;\n]{2,30})/),
               }
               for (const k of Object.keys(fields)) if (!fields[k]) delete fields[k]
               return json(res, 200, { ok: true, fields, sources, answer: String(searched.answer || '').slice(0, 1200), note: '联网结果仅供核对，需人工确认后保存' })
