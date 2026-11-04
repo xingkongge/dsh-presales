@@ -1690,6 +1690,24 @@ export function apply(ctx, rawConfig = {}) {
         if (req.headers[HEADER] !== '1') { res.writeHead(403).end('forbidden'); return }
         const route = url.pathname.slice(prefix.length)
         try {
+          if (route === 'opp_save' && req.method === 'POST') {
+            try {
+              const b = await readBody(req)
+              if (!String(b.name || '').trim()) return json(res, 400, { ok: false, error: '商机名称必填' })
+              const no = await nextOppNo()
+              const stage = b.stage || '线索阶段'
+              if (!OPP_STAGES.includes(stage)) return json(res, 400, { ok: false, error: `阶段必须是：${OPP_STAGES.join('、')}` })
+              const [id] = await create('opportunities', [{
+                '商机编号': no, '商机名称': String(b.name).trim(), '客户编号': b.customerNo || '', '客户名称': b.customerName || '',
+                '商机金额万元': Number(b.amount) || 0, '阶段': stage, '预计落单时间': b.expected || '',
+                '来源': b.source || '主动开发', '行业门类（一级）': b.industryL1 || '', '行业大类（二级）': b.industryL2 || '',
+                '联系人': b.contact || '', '联系电话': b.phone || '', '简介': b.intro || '',
+                '销售姓名': b.sellerName || '', '售前姓名': b.ownerName || '', '赢单率': 0.1,
+              }])
+              await logOppChange({ oppId: id, oppNo: no, field: '新建', oldValue: '', newValue: stage, reason: '新建商机', by: b.ownerName })
+              return json(res, 200, { ok: true, id, no })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
           if (route === 'opps') {
             const kw = String(url.searchParams.get('keyword') || '').toLowerCase()
             const stage = url.searchParams.get('stage') || ''

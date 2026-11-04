@@ -112,6 +112,8 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [nextStage, setNextStage] = React.useState('')
       const [reason, setReason] = React.useState('')
       const [form, setForm] = React.useState({ way: '电话', person: '', content: '', next: '', date: '', nextDate: '' })
+      const [customers, setCustomers] = React.useState([])
+      const [oppForm, setOppForm] = React.useState(null)
 
       async function loadRfqs() {
         try { const r = await api('rfq_list'); setRfqs(r.items || []) } catch {}
@@ -124,8 +126,8 @@ button.presales-badge{background:transparent;cursor:pointer}
 
       async function load() {
         try {
-          const [ls, bd] = await Promise.all([api('opps?keyword=' + encodeURIComponent(keyword) + '&stage=' + encodeURIComponent(stage)), api('opp_board')])
-          setItems(ls.items || []); setBoard(bd)
+          const [ls, bd, cs] = await Promise.all([api('opps?keyword=' + encodeURIComponent(keyword) + '&stage=' + encodeURIComponent(stage)), api('opp_board'), api('customers')])
+          setItems(ls.items || []); setBoard(bd); setCustomers(cs.items || [])
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
       React.useEffect(() => { void load() }, [])
@@ -154,6 +156,54 @@ button.presales-badge{background:transparent;cursor:pointer}
           await open(detail.item.no)
           setMsg({ kind: 'ok', text: '跟进已登记' })
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setBusy(false) }
+      }
+
+      async function saveOpp() {
+        if (!oppForm || !String(oppForm.name || '').trim()) { setMsg({ kind: 'err', text: '商机名称必填' }); return }
+        try {
+          const r = await api('opp_save', { method: 'POST', body: JSON.stringify(oppForm) })
+          setOppForm(null)
+          await load()
+          setMsg({ kind: 'ok', text: `已新建商机 ${r.no}` })
+          await open(r.no)
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+      }
+
+      function oppField(key, label, type = 'text') {
+        return h('label', null, h('span', { className: 'presales-label' }, label),
+          h('input', { className: 'presales-input', type, value: oppForm?.[key] ?? '', onChange: (e) => setOppForm({ ...oppForm, [key]: e.target.value }) }))
+      }
+
+      if (oppForm) {
+        return h('div', null,
+          h('section', { className: 'presales-card' },
+            h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+              h('b', null, '新建商机'),
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => setOppForm(null) }, '取消')),
+            h('div', { className: 'presales-grid', style: { marginTop: 8 } },
+              oppField('name', '商机名称'),
+              h('label', null, h('span', { className: 'presales-label' }, '客户'),
+                h('select', { className: 'presales-select', value: oppForm.customerId || '', onChange: (e) => {
+                  const c = customers.find((x) => x.id === e.target.value)
+                  setOppForm({ ...oppForm, customerId: e.target.value, customerNo: c?.code || '', customerName: c?.name || '' })
+                } },
+                h('option', { value: '' }, '请选择客户'),
+                customers.map((c) => h('option', { key: c.id, value: c.id }, `${c.name}${c.code ? ' · ' + c.code : ''}`)))),
+              oppField('amount', '金额（万元）', 'number'),
+              h('label', null, h('span', { className: 'presales-label' }, '阶段'),
+                h('select', { className: 'presales-select', value: oppForm.stage || '线索阶段', onChange: (e) => setOppForm({ ...oppForm, stage: e.target.value }) },
+                  STAGES.map((x) => h('option', { key: x, value: x }, x)))),
+              oppField('expected', '预计落单', 'date'),
+              h('label', null, h('span', { className: 'presales-label' }, '来源'),
+                h('select', { className: 'presales-select', value: oppForm.source || '主动开发', onChange: (e) => setOppForm({ ...oppForm, source: e.target.value }) },
+                  ['主动开发','客户介绍','渠道合作','招标','老客户复购','其他'].map((x) => h('option', { key: x, value: x }, x)))),
+              oppField('industryL1', '行业门类（一级）'), oppField('industryL2', '行业大类（二级）'),
+              oppField('contact', '联系人'), oppField('phone', '联系电话'),
+              oppField('sellerName', '销售'), oppField('ownerName', '售前')),
+            h('label', null, h('span', { className: 'presales-label' }, '简介'),
+              h('textarea', { className: 'presales-input', style: { minHeight: 70 }, value: oppForm.intro || '', onChange: (e) => setOppForm({ ...oppForm, intro: e.target.value }) })),
+            h('div', { className: 'presales-row', style: { marginTop: 8 } },
+              h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void saveOpp() }, '保存'))))
       }
 
       if (detail) {
@@ -219,7 +269,9 @@ button.presales-badge{background:transparent;cursor:pointer}
               h('select', { className: 'presales-select', style: { maxWidth: 130 }, value: stage, onChange: (e) => { setStage(e.target.value); setTimeout(() => void load(), 0) } },
                 h('option', { value: '' }, '全部阶段'), STAGES.map((s) => h('option', { key: s, value: s }, s))),
               h('span', { className: 'presales-muted' }, `共 ${items.length} 个商机`)),
-            h('button', { className: 'presales-btn primary', type: 'button', onClick: () => onNewOpp && onNewOpp() }, '新建商机（对话）')),
+            h('div', { className: 'presales-row' },
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => setOppForm({ stage: '线索阶段', source: '主动开发', amount: '', expected: '' }) }, '新建商机'),
+              h('button', { className: 'presales-btn primary', type: 'button', onClick: () => onNewOpp && onNewOpp() }, '新建商机（对话）'))),
           board ? h('div', { className: 'presales-muted', style: { marginTop: 6 } },
             `总金额 ${board.amount.toFixed(0)} 万 · 赢单 ${board.won} · 赢单率 ${board.total ? ((board.won / board.total) * 100).toFixed(0) + '%' : '-'}`) : null,
           h('table', { className: 'presales-table', style: { marginTop: 8 } },
