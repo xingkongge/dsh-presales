@@ -18,6 +18,11 @@ window.__ModuleLoader__.load({
     const API = '/presales/api/'
     const HDR = { 'x-dsh-presales': '1' }
 
+    const FALLBACK_CUSTOMER_PROMPT = `你在帮用户新建客户。先用一句话问用户：「请告诉我客户的全称和所在省市，我来帮你查工商信息。」
+拿到后联网检索公开工商信息；查不到的字段留空，不编造；同名企业先列候选让用户选。
+用简单字段表展示：客户名称/省市/行业/法定代表人/注册资本/成立时间/地址/联系人/简介，并附来源。
+等用户明确确认后，调用 customer_create 写入，来源写进 信息来源/来源链接；成功后只回复客户编号和名称。`
+
     const STYLE_MARK = 'dsh-presales/panel.css'
     const STYLE = `
 .presales-panel{box-sizing:border-box;height:100%;overflow:auto;padding:20px 24px 56px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-base);font:14px/1.55 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
@@ -721,6 +726,45 @@ button.presales-badge{background:transparent;cursor:pointer}
         }
       }
 
+      async function newCustomerChat() {
+        let prompt = FALLBACK_CUSTOMER_PROMPT
+        try { const r = await api('customer_prompt'); if (r?.prompt) prompt = r.prompt } catch {}
+        const svc = getSvc('uiWorkspace')
+        const sessions = getSvc('sessions')
+        const lay = getSvc('layout')
+        const copyPrompt = () => { try { navigator.clipboard.writeText(prompt) } catch {} ; setChatNotice('已复制「新建客户」提示词：请新建会话后粘贴发送。') }
+        if (!svc && !sessions) { copyPrompt(); return }
+        try {
+          if (sessions && typeof sessions.create === 'function') {
+            const id = await sessions.create({})
+            if (id) {
+              if (svc && typeof svc.openSession === 'function') svc.openSession(id)
+              if (lay && typeof lay.selectPanel === 'function') lay.selectPanel(null)
+              await sessions.using(id, { source: 'controllerOperation' }, async (ref) => {
+                await ref.binding.session.prompt([{ type: 'text', text: prompt }], 'queue')
+              })
+              setChatNotice('已新建会话并发送「新建客户」提示；告诉它客户全称和省市即可。')
+              return
+            }
+          }
+          const before = new Set((sessions && sessions.list && sessions.list.getSnapshot ? sessions.list.getSnapshot().ids : []) || [])
+          if (svc && typeof svc.startSession === 'function') svc.startSession()
+          if (lay && typeof lay.selectPanel === 'function') lay.selectPanel(null)
+          let newId = null
+          for (let i = 0; i < 20 && !newId; i += 1) {
+            await new Promise((r) => setTimeout(r, 100))
+            const ids = (sessions && sessions.list && sessions.list.getSnapshot ? sessions.list.getSnapshot().ids : []) || []
+            newId = ids.find((x) => !before.has(x)) || null
+          }
+          if (newId && sessions && typeof sessions.using === 'function') {
+            await sessions.using(newId, { source: 'controllerOperation' }, async (ref) => {
+              await ref.binding.session.prompt([{ type: 'text', text: prompt }], 'queue')
+            })
+            setChatNotice('已新建会话并发送「新建客户」提示；告诉它客户全称和省市即可。')
+          } else { copyPrompt() }
+        } catch (e) { setChatNotice('新建会话失败：' + String(e.message || e) + '（已复制提示词，可手动粘贴）'); copyPrompt() }
+      }
+
       const tabBtn = (id, label) => h('button', {
         key: id, className: 'presales-tab', type: 'button', role: 'tab', 'aria-selected': tab === id,
         onClick: () => setTab(id),
@@ -813,7 +857,9 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('div', { className: 'presales-row' },
               h('input', { className: 'presales-input', style: { maxWidth: 280 }, placeholder: '搜客户名称/编号/行业', value: custQuery, onChange: (e) => setCustQuery(e.target.value) }),
               h('span', { className: 'presales-muted' }, `共 ${rows.length} 个客户`)),
-            h('button', { className: 'presales-btn primary', type: 'button', onClick: () => setCustForm({ '客户名称': '', '状态': '正常' }) }, '新建客户')),
+            h('div', { className: 'presales-row' },
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustForm({ '客户名称': '', '状态': '正常' }) }, '新建客户'),
+              h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void newCustomerChat() }, '新建客户（对话）'))),
           h('table', { className: 'presales-table', style: { marginTop: 8 } },
             h('thead', null, h('tr', null, ['客户名称', '编号', '省市', '行业', '负责人', '状态'].map((t) => h('th', { key: t }, t)))),
             h('tbody', null, rows.map((c) => h('tr', { key: c.id, style: { cursor: 'pointer' }, onClick: () => void openCustomer(c.id) },

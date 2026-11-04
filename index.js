@@ -30,7 +30,7 @@ import {
 } from './lib/pricing.js'
 import { resolveTables } from './lib/tables.js'
 import { buildQuoteLayout } from './lib/xlsx-layout.js'
-import { PRESALES_SKILL, NEW_OPP_PROMPT } from './lib/skill.js'
+import { PRESALES_SKILL, NEW_OPP_PROMPT, NEW_CUSTOMER_PROMPT } from './lib/skill.js'
 import { planSectionWrites } from './lib/section-render.js'
 import { buildRfqMail } from './lib/rfq-mail.js'
 import * as XLSX from 'xlsx'
@@ -367,6 +367,49 @@ export function apply(ctx, rawConfig = {}) {
         `变更记录（${cs.length}）：`,
         ...cs.slice(0, 5).map((c) => `- ${String(c['变更时间'] || '').slice(0, 10)} ${c['字段']}：${c['原值']} → ${c['新值']}`),
       ].filter(Boolean).join('\n')
+    },
+  })
+
+  async function nextCustomerNo() {
+    const rows = await list('customers')
+    const year = new Date().getFullYear()
+    let max = 0
+    for (const r of rows) {
+      const m = String(r['客户编号'] || '').match(/C-(\d{4})-(\d+)/)
+      if (m && Number(m[1]) === year) max = Math.max(max, Number(m[2]))
+    }
+    return `C-${year}-${String(max + 1).padStart(4, '0')}`
+  }
+
+  register({
+    name: 'customer_create',
+    description: '新建客户（人工确认后调用）：自动生成 C-YYYY-NNNN，可带工商信息来源。',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' }, region: { type: 'string' }, industryL1: { type: 'string' }, industryL2: { type: 'string' },
+        legal: { type: 'string' }, capital: { type: 'string' }, founded: { type: 'string' }, address: { type: 'string' },
+        contact: { type: 'string' }, phone: { type: 'string' }, intro: { type: 'string' }, owner: { type: 'string' },
+        source: { type: 'string', description: '信息来源，如 企查查' }, sourceUrl: { type: 'string' }, creator: { type: 'string' },
+      },
+      required: ['name'],
+    },
+    output: TEXT_OUTPUT,
+    async execute(args = {}) {
+      const no = await nextCustomerNo()
+      const row = {
+        '客户编号': no, '客户名称': args.name, '省市': args.region || '',
+        '行业门类一级': args.industryL1 || '', '行业门类二级': args.industryL2 || '',
+        '行业': args.industryL2 || args.industryL1 || '', '法定代表人': args.legal || '',
+        '注册资本': args.capital || '', '成立时间': args.founded || '', '地址': args.address || '',
+        '联系人': args.contact || '', '联系电话': args.phone || '', '客户简介': args.intro || '',
+        '负责人': args.owner || '', '创建人': args.creator || '', '状态': '正常',
+        '信息来源': args.source || '', '来源链接': args.sourceUrl || '',
+      }
+      const clean = {}
+      for (const [k, v] of Object.entries(row)) { if (v !== null && v !== undefined && v !== '') clean[k] = v }
+      const [id] = await create('customers', [clean])
+      return `✅ 已新建客户 ${no}（${args.name}）`
     },
   })
 
@@ -1865,6 +1908,9 @@ export function apply(ctx, rawConfig = {}) {
               res.end(buf)
             } catch { res.writeHead(404).end('not found') }
             return
+          }
+          if (route === 'customer_prompt') {
+            return json(res, 200, { ok: true, prompt: NEW_CUSTOMER_PROMPT })
           }
           if (route === 'skill_prompt') {
             return json(res, 200, { ok: true, prompt: NEW_OPP_PROMPT })
