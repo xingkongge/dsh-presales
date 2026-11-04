@@ -104,6 +104,16 @@ button.presales-badge{background:transparent;cursor:pointer}
       return { untaxed, tax, gross, profit, margin: untaxed > 0 ? profit / untaxed : null }
     }
 
+    function pager(total, page, setPage, size = 10) {
+      const pages = Math.max(1, Math.ceil(total / size))
+      const cur = Math.min(Math.max(1, page), pages)
+      return h('div', { className: 'presales-row', style: { justifyContent: 'space-between', marginTop: 8 } },
+        h('span', { className: 'presales-muted' }, `第 ${cur} / ${pages} 页 · 共 ${total} 条`),
+        h('div', { className: 'presales-row' },
+          h('button', { className: 'presales-btn', type: 'button', disabled: cur <= 1, onClick: () => setPage(cur - 1) }, '上一页'),
+          h('button', { className: 'presales-btn', type: 'button', disabled: cur >= pages, onClick: () => setPage(cur + 1) }, '下一页')))
+    }
+
     function OppTab({ onQuote, onReload, onNewOpp }) {
       const [items, setItems] = React.useState([])
       const [board, setBoard] = React.useState(null)
@@ -983,16 +993,6 @@ button.presales-badge{background:transparent;cursor:pointer}
       const fmtCell = (v) => Array.isArray(v)
         ? v.map((x) => (x && typeof x === 'object' ? (x.name || x.label || x.id || '') : x)).join('、')
         : (v && typeof v === 'object' ? (v.name || v.label || v.id || '') : (v ?? ''))
-
-      function pager(total, page, setPage, size = 10) {
-        const pages = Math.max(1, Math.ceil(total / size))
-        const cur = Math.min(Math.max(1, page), pages)
-        return h('div', { className: 'presales-row', style: { justifyContent: 'space-between', marginTop: 8 } },
-          h('span', { className: 'presales-muted' }, `第 ${cur} / ${pages} 页 · 共 ${total} 条`),
-          h('div', { className: 'presales-row' },
-            h('button', { className: 'presales-btn', type: 'button', disabled: cur <= 1, onClick: () => setPage(cur - 1) }, '上一页'),
-            h('button', { className: 'presales-btn', type: 'button', disabled: cur >= pages, onClick: () => setPage(cur + 1) }, '下一页')))
-      }
 
       function renderMailCard() {
         return (mailPreview ? h('section', { className: 'presales-card' },
