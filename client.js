@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
 .presales-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .presales-grid{display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:10px}
 .presales-label{color:var(--dsw-alias-label-secondary);font-size:12px;display:block;margin-bottom:4px}
-.presales-input,.presales-select{box-sizing:border-box;width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:13px}
+.presales-input,.presales-select{border-color:color-mix(in srgb, var(--dsw-alias-label-primary) 32%, transparent) !important;background:var(--dsw-alias-bg-layer-1) !important;box-sizing:border-box;width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:13px}
 .presales-btn{display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:7px;border:1px solid var(--dsw-alias-border-l1, color-mix(in srgb, currentColor 28%, transparent));background:var(--dsw-alias-bg-layer-1, color-mix(in srgb, currentColor 7%, transparent));color:var(--dsw-alias-label-primary, inherit);cursor:pointer;font-size:13px;text-decoration:none;line-height:1.2}
 .presales-btn:hover{border-color:var(--dsw-alias-brand-primary)}
 .presales-btn.primary{background:#2563eb !important;color:#ffffff !important;border:1px solid #1d4ed8 !important;font-weight:600}
@@ -40,7 +40,7 @@ window.__ModuleLoader__.load({
 .presales-table{width:100%;border-collapse:collapse;font-size:13px}
 .presales-table th{ text-align:left;color:var(--dsw-alias-label-secondary);font-weight:500;font-size:12px;padding:6px 8px;border-bottom:1px solid var(--dsw-alias-border-l1)}
 .presales-table td{padding:6px 8px;border-bottom:1px solid var(--dsw-alias-border-l1);vertical-align:middle}
-.presales-table input{width:72px;padding:4px 6px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);color:inherit;font-size:13px}
+.presales-table input{width:72px;padding:4px 6px;border-radius:6px;border:1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 32%, transparent);background:var(--dsw-alias-bg-layer-1);color:inherit;font-size:13px}
 .presales-results{list-style:none;margin:8px 0 0;padding:0;max-height:220px;overflow:auto}
 .presales-results li{display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer}
 .presales-results li:hover{background:var(--dsw-alias-bg-layer-2)}
@@ -63,6 +63,7 @@ button.presales-badge{background:transparent;cursor:pointer}
 .presales-tree-l2{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 6px 18px}
 .presales-tree-l2 button{background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:var(--dsw-alias-label-secondary)}
 .presales-tree-l2 button.active{border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-brand-primary)}
+.presales-input:focus,.presales-select:focus,.presales-table input:focus{outline:none;border-color:var(--dsw-alias-brand-primary,#2563eb) !important;box-shadow:0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary,#2563eb) 18%, transparent)}
 .presales-tabs{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--dsw-alias-border-l1);padding-bottom:8px}
 .presales-tab{padding:6px 14px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;font-size:13px}
 .presales-tab[aria-selected="true"]{background:var(--dsw-alias-bg-layer-1);border-color:var(--dsw-alias-border-l1);color:var(--dsw-alias-label-primary);font-weight:600}
@@ -116,6 +117,8 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [form, setForm] = React.useState({ way: '电话', person: '', content: '', next: '', date: '', nextDate: '' })
       const [customers, setCustomers] = React.useState([])
       const [oppForm, setOppForm] = React.useState(null)
+      const [oppPage, setOppPage] = React.useState(1)
+      const [oppSource, setOppSource] = React.useState('')
 
       async function loadRfqs() {
         try { const r = await api('rfq_list'); setRfqs(r.items || []) } catch {}
@@ -266,14 +269,21 @@ button.presales-badge{background:transparent;cursor:pointer}
               `${d.no} · ${d.title} · ${d.type} ${d.version}`, d.link ? h('a', { href: d.link, target: '_blank', rel: 'noreferrer', style: { marginLeft: 8 } }, '打开') : null))) : h('div', { className: 'presales-muted' }, '暂无')))
       }
 
+      const sources = [...new Set(items.map((o) => o.source).filter(Boolean))]
+      const filteredItems = items.filter((o) => !oppSource || o.source === oppSource)
+      const oppSize = 10
+      const oppCur = Math.min(oppPage, Math.max(1, Math.ceil(filteredItems.length / oppSize)))
+      const oppView = filteredItems.slice((oppCur - 1) * oppSize, oppCur * oppSize)
       return h('div', null,
         h('section', { className: 'presales-card' },
           h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
             h('div', { className: 'presales-row' },
-              h('input', { className: 'presales-input', style: { maxWidth: 260 }, placeholder: '搜商机名称/客户/编号', value: keyword, onChange: (e) => setKeyword(e.target.value), onKeyDown: (e) => { if (e.key === 'Enter') void load() } }),
-              h('select', { className: 'presales-select', style: { maxWidth: 130 }, value: stage, onChange: (e) => { setStage(e.target.value); setTimeout(() => void load(), 0) } },
+              h('input', { className: 'presales-input', style: { maxWidth: 240 }, placeholder: '搜商机名称/客户/编号', value: keyword, onChange: (e) => setKeyword(e.target.value), onKeyDown: (e) => { if (e.key === 'Enter') void load() } }),
+              h('select', { className: 'presales-select', style: { maxWidth: 120 }, value: stage, onChange: (e) => { setStage(e.target.value); setOppPage(1); setTimeout(() => void load(), 0) } },
                 h('option', { value: '' }, '全部阶段'), STAGES.map((s) => h('option', { key: s, value: s }, s))),
-              h('span', { className: 'presales-muted' }, `共 ${items.length} 个商机`)),
+              h('select', { className: 'presales-select', style: { maxWidth: 120 }, value: oppSource, onChange: (e) => { setOppSource(e.target.value); setOppPage(1) } },
+                h('option', { value: '' }, '全部来源'), sources.map((x) => h('option', { key: x, value: x }, x))),
+              h('span', { className: 'presales-muted' }, `共 ${filteredItems.length} 个商机`)),
             h('div', { className: 'presales-row' },
               h('button', { className: 'presales-btn', type: 'button', onClick: () => setOppForm({ stage: '线索阶段', source: '主动开发', amount: '', expected: '' }) }, '新建商机'),
               h('button', { className: 'presales-btn primary', type: 'button', onClick: () => onNewOpp && onNewOpp() }, '新建商机（对话）'))),
@@ -281,9 +291,10 @@ button.presales-badge{background:transparent;cursor:pointer}
             `总金额 ${board.amount.toFixed(0)} 万 · 赢单 ${board.won} · 赢单率 ${board.total ? ((board.won / board.total) * 100).toFixed(0) + '%' : '-'}`) : null,
           h('table', { className: 'presales-table', style: { marginTop: 8 } },
             h('thead', null, h('tr', null, ['商机名称', '编号', '客户', '阶段', '金额(万)', '预计落单'].map((t) => h('th', { key: t }, t)))),
-            h('tbody', null, items.map((o) => h('tr', { key: o.id, style: { cursor: 'pointer' }, onClick: () => void open(o.no) },
+            h('tbody', null, oppView.map((o) => h('tr', { key: o.id, style: { cursor: 'pointer' }, onClick: () => void open(o.no) },
               h('td', null, h('b', null, o.name)), h('td', null, o.no), h('td', null, o.customerName || '-'),
               h('td', null, o.stage || '-'), h('td', null, o.amount ?? 0), h('td', null, o.expected || '-')))))),
+          pager(filteredItems.length, oppCur, setOppPage, oppSize),
         msg ? h('div', { className: `presales-msg ${msg.kind === 'ok' ? 'ok' : 'err'}` }, msg.text) : null)
     }
 
@@ -328,6 +339,11 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [custDetail, setCustDetail] = React.useState(null)
       const [custForm, setCustForm] = React.useState(null)
       const [custQuery, setCustQuery] = React.useState('')
+      const [custIndustry, setCustIndustry] = React.useState('')
+      const [custPage, setCustPage] = React.useState(1)
+      const [quoteQuery, setQuoteQuery] = React.useState('')
+      const [quoteStatus, setQuoteStatus] = React.useState('')
+      const [quotePage, setQuotePage] = React.useState(1)
       const [lookupBusy, setLookupBusy] = React.useState(false)
       const [lookupSources, setLookupSources] = React.useState([])
       const [selected, setSelected] = React.useState({})
@@ -341,6 +357,11 @@ button.presales-badge{background:transparent;cursor:pointer}
       const customer = customers.find((c) => c.id === customerId) || null
       const opp = opps.find((o) => o.id === oppId) || null
       const totals = computeTotals(cart)
+      const quoteQ = quoteQuery.trim().toLowerCase()
+      const quoteRows = quotes.filter((q) => (!quoteQ || `${q.quoteNo} ${q.customerName}`.toLowerCase().includes(quoteQ)) && (!quoteStatus || q.status === quoteStatus))
+      const quoteSize = 5
+      const quoteCur = Math.min(quotePage, Math.max(1, Math.ceil(quoteRows.length / quoteSize)))
+      const quoteView = quoteRows.slice((quoteCur - 1) * quoteSize, quoteCur * quoteSize)
 
       async function loadRfqs() {
         try { const r = await api('rfq_list'); setRfqs(r.items || []) } catch {}
@@ -891,19 +912,36 @@ button.presales-badge{background:transparent;cursor:pointer}
                 h('span', null, h('b', null, o['商机编号']), ` ${o['商机名称']}`), h('span', null, `${o['阶段'] || ''} · ${o['金额'] || 0} 万`))))) : h('div', { className: 'presales-muted' }, '暂无关联商机'))
         }
         const q = custQuery.trim().toLowerCase()
-        const rows = customers.filter((c) => !q || `${c.name} ${c.code} ${c.industry}`.toLowerCase().includes(q))
+        const industries = [...new Set(customers.map((c) => c.industry).filter(Boolean))]
+        const rows = customers.filter((c) => (!q || `${c.name} ${c.code} ${c.industry}`.toLowerCase().includes(q)) && (!custIndustry || c.industry === custIndustry))
+        const size = 10
+        const page = Math.min(custPage, Math.max(1, Math.ceil(rows.length / size)))
+        const view = rows.slice((page - 1) * size, page * size)
         return h('section', { className: 'presales-card' },
           h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
             h('div', { className: 'presales-row' },
-              h('input', { className: 'presales-input', style: { maxWidth: 280 }, placeholder: '搜客户名称/编号/行业', value: custQuery, onChange: (e) => setCustQuery(e.target.value) }),
+              h('input', { className: 'presales-input', style: { maxWidth: 260 }, placeholder: '搜客户名称/编号/行业', value: custQuery, onChange: (e) => { setCustQuery(e.target.value); setCustPage(1) } }),
+              h('select', { className: 'presales-select', style: { maxWidth: 130 }, value: custIndustry, onChange: (e) => { setCustIndustry(e.target.value); setCustPage(1) } },
+                h('option', { value: '' }, '全部行业'), industries.map((x) => h('option', { key: x, value: x }, x))),
               h('span', { className: 'presales-muted' }, `共 ${rows.length} 个客户`)),
             h('div', { className: 'presales-row' },
               h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustForm({ '客户名称': '', '状态': '正常' }) }, '新建客户'),
               h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void newCustomerChat() }, '新建客户（对话）'))),
           h('table', { className: 'presales-table', style: { marginTop: 8 } },
             h('thead', null, h('tr', null, ['客户名称', '编号', '省市', '行业', '负责人', '状态'].map((t) => h('th', { key: t }, t)))),
-            h('tbody', null, rows.map((c) => h('tr', { key: c.id, style: { cursor: 'pointer' }, onClick: () => void openCustomer(c.id) },
-              h('td', null, h('b', null, c.name)), h('td', null, c.code), h('td', null, c.region || '-'), h('td', null, c.industry || '-'), h('td', null, c.owner || '-'), h('td', null, c.status || '-'))))))
+            h('tbody', null, view.map((c) => h('tr', { key: c.id, style: { cursor: 'pointer' }, onClick: () => void openCustomer(c.id) },
+              h('td', null, h('b', null, c.name)), h('td', null, c.code), h('td', null, c.region || '-'), h('td', null, c.industry || '-'), h('td', null, c.owner || '-'), h('td', null, c.status || '-'))))),
+          pager(rows.length, page, setCustPage, size))
+      }
+
+      function pager(total, page, setPage, size = 10) {
+        const pages = Math.max(1, Math.ceil(total / size))
+        const cur = Math.min(Math.max(1, page), pages)
+        return h('div', { className: 'presales-row', style: { justifyContent: 'space-between', marginTop: 8 } },
+          h('span', { className: 'presales-muted' }, `第 ${cur} / ${pages} 页 · 共 ${total} 条`),
+          h('div', { className: 'presales-row' },
+            h('button', { className: 'presales-btn', type: 'button', disabled: cur <= 1, onClick: () => setPage(cur - 1) }, '上一页'),
+            h('button', { className: 'presales-btn', type: 'button', disabled: cur >= pages, onClick: () => setPage(cur + 1) }, '下一页')))
       }
 
       function renderMailCard() {
@@ -1177,10 +1215,18 @@ button.presales-badge{background:transparent;cursor:pointer}
               lastQuote.link ? h('a', { className: 'presales-btn', href: lastQuote.link, target: '_blank', rel: 'noreferrer' }, '打开 / 下载') : null,
               h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void renderXlsx() }, '重新生成 Excel')))) : null,
         h('section', { className: 'presales-card' },
-          h('div', { className: 'presales-muted', style: { marginBottom: 6 } }, '最近报价'),
-          quotes.length ? h('ul', { className: 'presales-quotes' }, quotes.map((q) => h('li', { key: q.quoteNo },
+          h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+            h('div', { className: 'presales-row' },
+              h('b', null, '最近报价'),
+              h('input', { className: 'presales-input', style: { maxWidth: 220 }, placeholder: '搜单号/客户', value: quoteQuery, onChange: (e) => { setQuoteQuery(e.target.value); setQuotePage(1) } }),
+              h('select', { className: 'presales-select', style: { maxWidth: 120 }, value: quoteStatus, onChange: (e) => { setQuoteStatus(e.target.value); setQuotePage(1) } },
+                h('option', { value: '' }, '全部状态'),
+                [...new Set(quotes.map((q) => q.status).filter(Boolean))].map((st) => h('option', { key: st, value: st }, st)))),
+            h('span', { className: 'presales-muted' }, `共 ${quoteRows.length} 张`)),
+          quoteView.length ? h('ul', { className: 'presales-quotes' }, quoteView.map((q) => h('li', { key: q.quoteNo },
             h('span', null, h('b', null, q.quoteNo), ` ${q.customerName || ''} · ${q.status}`),
-            h('span', null, q.link ? h('a', { href: q.link, target: '_blank', rel: 'noreferrer', style: { marginRight: 10 } }, '打开') : null, `含税 ${money(q.grossTotal)}`)))) : h('div', { className: 'presales-muted' }, '暂无')))
+            h('span', null, q.link ? h('a', { href: q.link, target: '_blank', rel: 'noreferrer', style: { marginRight: 10 } }, '打开') : null, `含税 ${money(q.grossTotal)}`)))) : h('div', { className: 'presales-muted' }, '暂无'),
+          pager(quoteRows.length, quoteCur, setQuotePage, quoteSize)))
     }
 
     class Boundary extends React.Component {
