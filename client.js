@@ -860,9 +860,23 @@ button.presales-badge{background:transparent;cursor:pointer}
         setLookupBusy(true); setLookupSources([]); setMsg({ kind: 'ok', text: '正在联网查询工商信息（约 10~20 秒）…' })
         try {
           const r = await api('customer_lookup?name=' + encodeURIComponent(name) + '&region=' + encodeURIComponent(custForm['省市'] || ''))
-          setCustForm({ ...custForm, ...(r.fields || {}), '信息来源': '联网检索', '来源链接': (r.sources || []).map((x) => x.url).join('\n') })
+          let fields = r.fields || {}
+          if (!Object.keys(fields).length) {
+            // 兜底：有些搜索源把工商信息放在标题里，Host 旧版没解析时前端再解析一次
+            const text = (r.sources || []).map((x) => `${x.title || ''}\n${x.snippet || ''}`).join('\n')
+            const pick = (re) => { const m = text.match(re); return m ? m[1].trim().replace(/[，,。；;]$/, '') : '' }
+            fields = {
+              '法定代表人': pick(/法定代表人[：:\s]*([^\s，,。；;\n]{2,12})/),
+              '注册资本': pick(/注册资本[：:\s]*([0-9.,]+[万亿]?[元人民币]*)/),
+              '成立时间': pick(/成立(?:日期|时间)[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}日?)/),
+              '地址': pick(/(?:注册地址|地址)[：:\s]*为?([^\n，,。；;]{6,80})/),
+              '行业门类二级': pick(/所属行业(?:为)?([^，,。；;\n]{2,30})/),
+            }
+            for (const k of Object.keys(fields)) if (!fields[k]) delete fields[k]
+          }
+          setCustForm({ ...custForm, ...fields, '信息来源': '联网检索', '来源链接': (r.sources || []).map((x) => x.url).join('\n') })
           setLookupSources(r.sources || [])
-          const n = Object.keys(r.fields || {}).length
+          const n = Object.keys(fields).length
           setMsg({ kind: n ? 'ok' : 'err', text: n ? `已填入 ${n} 个字段，请核对后保存` : '没有检索到可用的工商字段，请手动填写' })
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setLookupBusy(false) }
       }
