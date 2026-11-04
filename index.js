@@ -400,8 +400,7 @@ export function apply(ctx, rawConfig = {}) {
       const no = await nextCustomerNo()
       const row = {
         '客户编号': no, '客户名称': args.name, '省市': args.region || '',
-        '行业分类': args.industryCategory || args.industry || '',
-        '行业': args.industry || '', '法定代表人': args.legal || '',
+        '行业分类': args.industryCategory || args.industry || '', '法定代表人': args.legal || '',
         '注册资本': args.capital || '', '成立时间': args.founded || '', '地址': args.address || '',
         '联系人': args.contact || '', '联系电话': args.phone || '', '客户简介': args.intro || '',
         '负责人': args.owner || '', '创建人': args.creator || '', '状态': '正常',
@@ -2038,7 +2037,7 @@ for (const [idx, it] of (body.items || []).entries()) {
               if (!String(body['客户名称'] || '').trim()) return json(res, 400, { ok: false, error: '客户名称必填' })
               if (body.id) {
                 const patch = {}
-                for (const k of ['客户名称','省市','行业分类','行业','法定代表人','注册资本','成立时间','地址','联系人','联系电话','客户简介','负责人','状态']) {
+                for (const k of ['客户名称','省市','行业分类','法定代表人','注册资本','成立时间','地址','联系人','联系电话','客户简介','负责人','状态']) {
                   if (body[k] !== undefined) patch[k] = body[k]
                 }
                 await updateRecord('customers', body.id, patch)
@@ -2055,7 +2054,7 @@ for (const [idx, it] of (body.items || []).entries()) {
               const row = {
                 '客户编号': no, '客户名称': String(body['客户名称']).trim(),
                 '省市': body['省市'] || '',
-                '行业分类': body['行业分类'] || '', '行业': body['行业'] || '', '法定代表人': body['法定代表人'] || '', '注册资本': body['注册资本'] || '',
+                '行业分类': body['行业分类'] || '', '法定代表人': body['法定代表人'] || '', '注册资本': body['注册资本'] || '',
                 '成立时间': body['成立时间'] || '', '地址': body['地址'] || '', '联系人': body['联系人'] || '',
                 '联系电话': body['联系电话'] || '', '客户简介': body['客户简介'] || '', '负责人': body['负责人'] || '',
                 '创建人': body['创建人'] || '', '状态': body['状态'] || '正常',
@@ -2091,7 +2090,7 @@ for (const [idx, it] of (body.items || []).entries()) {
               return json(res, 200, {
                 ok: true,
                 status: { ok: true, counts: { products: products.length, customers: customers.length, opportunities: opportunities.length, quotes: quotes.length, quoteTemplates: templates.length } },
-                customers: customers.map((c) => ({ id: c._id, code: c['客户编号'] || '', name: c['客户名称'] || '', region: c['省市'] || '', industry: c['行业'] || '', industryCategory: c['行业分类'] || '', legal: c['法定代表人'] || '', capital: c['注册资本'] || '', founded: c['成立时间'] || '', address: c['地址'] || '', contact: c['联系人'] || '', phone: c['联系电话'] || '', intro: c['客户简介'] || '', owner: Array.isArray(c['负责人']) ? c['负责人'].map((x) => (x && typeof x === 'object' ? (x.name || x.id || '') : x)).join('、') : (c['负责人'] || ''), creator: c['创建人'] || '', createdAt: c['创建时间'] || '', status: c['状态'] || '' })),
+                customers: customers.map((c) => ({ id: c._id, code: c['客户编号'] || '', name: c['客户名称'] || '', region: c['省市'] || '', industryCategory: c['行业分类'] || '', legal: c['法定代表人'] || '', capital: c['注册资本'] || '', founded: c['成立时间'] || '', address: c['地址'] || '', contact: c['联系人'] || '', phone: c['联系电话'] || '', intro: c['客户简介'] || '', owner: Array.isArray(c['负责人']) ? c['负责人'].map((x) => (x && typeof x === 'object' ? (x.name || x.id || '') : x)).join('、') : (c['负责人'] || ''), creator: c['创建人'] || '', createdAt: c['创建时间'] || '', status: c['状态'] || '' })),
                 templates: templates.filter((t) => t['启用状态'] === '启用').map((t) => ({ name: t['模板名称'], type: t['模板类型'], default: Boolean(t['默认模板']), fileId: t['文件ID'] || '' })),
                 quotes: quotes.slice(-10).reverse().map((q) => ({ quoteNo: q['报价单号'], customerName: q['客户名称'] || '', status: q['状态'] || '', grossTotal: Number(q['含税合计']) || 0, version: q['当前版本'] || '', link: q['文件链接'] || '' })),
                 categories: tree,
@@ -2110,7 +2109,7 @@ for (const [idx, it] of (body.items || []).entries()) {
           if (route === 'customers') {
             const rows = await list('customers')
             return json(res, 200, { ok: true, items: rows.map((r) => ({
-              id: r._id, code: r['客户编号'] || '', name: r['客户名称'] || '', industry: r['行业'] || '', level: r['客户等级'] || '',
+              id: r._id, code: r['客户编号'] || '', name: r['客户名称'] || '', industry: r['行业分类'] || '', level: r['客户等级'] || '',
             })) })
           }
           if (route === 'opportunities') {

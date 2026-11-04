@@ -18,6 +18,7 @@ window.__ModuleLoader__.load({
     const API = '/presales/api/'
     const HDR = { 'x-dsh-presales': '1' }
 
+    const GB_INDUSTRIES_FALLBACK = [["A", "农、林、牧、渔业", "01", "农业"], ["A", "农、林、牧、渔业", "02", "林业"], ["A", "农、林、牧、渔业", "03", "畜牧业"], ["A", "农、林、牧、渔业", "04", "渔业"], ["A", "农、林、牧、渔业", "05", "农、林、牧、渔专业及辅助性活动"], ["B", "采矿业", "06", "煤炭开采和洗选业"], ["B", "采矿业", "07", "石油和天然气开采业"], ["B", "采矿业", "08", "黑色金属矿采选业"], ["B", "采矿业", "09", "有色金属矿采选业"], ["B", "采矿业", "10", "非金属矿采选业"], ["B", "采矿业", "11", "开采专业及辅助性活动"], ["B", "采矿业", "12", "其他采矿业"], ["C", "制造业", "13", "农副食品加工业"], ["C", "制造业", "14", "食品制造业"], ["C", "制造业", "15", "酒、饮料和精制茶制造业"], ["C", "制造业", "16", "烟草制品业"], ["C", "制造业", "17", "纺织业"], ["C", "制造业", "18", "纺织服装、服饰业"], ["C", "制造业", "19", "皮革、毛皮、羽毛及其制品和制鞋业"], ["C", "制造业", "20", "木材加工和木、竹、藤、棕、草制品业"], ["C", "制造业", "21", "家具制造业"], ["C", "制造业", "22", "造纸和纸制品业"], ["C", "制造业", "23", "印刷和记录媒介复制业"], ["C", "制造业", "24", "文教、工美、体育和娱乐用品制造业"], ["C", "制造业", "25", "石油、煤炭及其他燃料加工业"], ["C", "制造业", "26", "化学原料和化学制品制造业"], ["C", "制造业", "27", "医药制造业"], ["C", "制造业", "28", "化学纤维制造业"], ["C", "制造业", "29", "橡胶和塑料制品业"], ["C", "制造业", "30", "非金属矿物制品业"], ["C", "制造业", "31", "黑色金属冶炼和压延加工业"], ["C", "制造业", "32", "有色金属冶炼和压延加工业"], ["C", "制造业", "33", "金属制品业"], ["C", "制造业", "34", "通用设备制造业"], ["C", "制造业", "35", "专用设备制造业"], ["C", "制造业", "36", "汽车制造业"], ["C", "制造业", "37", "铁路、船舶、航空航天和其他运输设备制造业"], ["C", "制造业", "38", "电气机械和器材制造业"], ["C", "制造业", "39", "计算机、通信和其他电子设备制造业"], ["C", "制造业", "40", "仪器仪表制造业"], ["C", "制造业", "41", "其他制造业"], ["C", "制造业", "42", "废弃资源综合利用业"], ["C", "制造业", "43", "金属制品、机械和设备修理业"], ["D", "电力、热力、燃气及水生产和供应业", "44", "电力、热力生产和供应业"], ["D", "电力、热力、燃气及水生产和供应业", "45", "燃气生产和供应业"], ["D", "电力、热力、燃气及水生产和供应业", "46", "水的生产和供应业"], ["E", "建筑业", "47", "房屋建筑业"], ["E", "建筑业", "48", "土木工程建筑业"], ["E", "建筑业", "49", "建筑安装业"], ["E", "建筑业", "50", "建筑装饰、装修和其他建筑业"], ["F", "批发和零售业", "51", "批发业"], ["F", "批发和零售业", "52", "零售业"], ["G", "交通运输、仓储和邮政业", "53", "铁路运输业"], ["G", "交通运输、仓储和邮政业", "54", "道路运输业"], ["G", "交通运输、仓储和邮政业", "55", "水上运输业"], ["G", "交通运输、仓储和邮政业", "56", "航空运输业"], ["G", "交通运输、仓储和邮政业", "57", "管道运输业"], ["G", "交通运输、仓储和邮政业", "58", "多式联运和运输代理业"], ["G", "交通运输、仓储和邮政业", "59", "装卸搬运和仓储业"], ["G", "交通运输、仓储和邮政业", "60", "邮政业"], ["H", "住宿和餐饮业", "61", "住宿业"], ["H", "住宿和餐饮业", "62", "餐饮业"], ["I", "信息传输、软件和信息技术服务业", "63", "电信、广播电视和卫星传输服务"], ["I", "信息传输、软件和信息技术服务业", "64", "互联网和相关服务"], ["I", "信息传输、软件和信息技术服务业", "65", "软件和信息技术服务业"], ["J", "金融业", "66", "货币金融服务"], ["J", "金融业", "67", "资本市场服务"], ["J", "金融业", "68", "保险业"], ["J", "金融业", "69", "其他金融业"], ["K", "房地产业", "70", "房地产业"], ["L", "租赁和商务服务业", "71", "租赁业"], ["L", "租赁和商务服务业", "72", "商务服务业"], ["M", "科学研究和技术服务业", "73", "研究和试验发展"], ["M", "科学研究和技术服务业", "74", "专业技术服务业"], ["M", "科学研究和技术服务业", "75", "科技推广和应用服务业"], ["N", "水利、环境和公共设施管理业", "76", "水利管理业"], ["N", "水利、环境和公共设施管理业", "77", "生态保护和环境治理业"], ["N", "水利、环境和公共设施管理业", "78", "公共设施管理业"], ["N", "水利、环境和公共设施管理业", "79", "土地管理业"], ["O", "居民服务、修理和其他服务业", "80", "居民服务业"], ["O", "居民服务、修理和其他服务业", "81", "机动车、电子产品和日用产品修理业"], ["O", "居民服务、修理和其他服务业", "82", "其他服务业"], ["P", "教育", "83", "教育"], ["Q", "卫生和社会工作", "84", "卫生"], ["Q", "卫生和社会工作", "85", "社会工作"], ["R", "文化、体育和娱乐业", "86", "新闻和出版业"], ["R", "文化、体育和娱乐业", "87", "广播、电视、电影和录音制作业"], ["R", "文化、体育和娱乐业", "88", "文化艺术业"], ["R", "文化、体育和娱乐业", "89", "体育"], ["R", "文化、体育和娱乐业", "90", "娱乐业"], ["S", "公共管理、社会保障和社会组织", "91", "中国共产党机关"], ["S", "公共管理、社会保障和社会组织", "92", "国家机构"], ["S", "公共管理、社会保障和社会组织", "93", "人民政协、民主党派"], ["S", "公共管理、社会保障和社会组织", "94", "社会保障"], ["S", "公共管理、社会保障和社会组织", "95", "群众团体、社会团体和其他成员组织"], ["S", "公共管理、社会保障和社会组织", "96", "基层群众自治组织"], ["T", "国际组织", "97", "国际组织"]].map(([group, groupName, code, name]) => ({ group, groupName, code, name }))
     const FALLBACK_CUSTOMER_PROMPT = `帮我新建一个客户。`
 
     const STYLE_MARK = 'dsh-presales/panel.css'
@@ -346,7 +347,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [quotePage, setQuotePage] = React.useState(1)
       const [lookupBusy, setLookupBusy] = React.useState(false)
       const [lookupSources, setLookupSources] = React.useState([])
-      const [industryOptions, setIndustryOptions] = React.useState([])
+      const [industryOptions, setIndustryOptions] = React.useState(GB_INDUSTRIES_FALLBACK)
       const [selected, setSelected] = React.useState({})
       const [mailQueue, setMailQueue] = React.useState([])
       const fileRef = React.useRef(null)
@@ -385,7 +386,7 @@ button.presales-badge{background:transparent;cursor:pointer}
           setCats(b.categories || [])
           const def = (b.templates || []).find((x) => x.default) || (b.templates || [])[0]
           if (def) setTemplate(def.name)
-          api('industry_options').then((r) => setIndustryOptions(r.items || [])).catch(() => {})
+          api('industry_options').then((r) => { if (r.items && r.items.length) setIndustryOptions(r.items) }).catch(() => {})
           api('skill_prompt').then((sp) => { if (sp?.prompt) setOppPrompt(sp.prompt) }).catch(() => {})
           // 模板文件检查很慢，放后台，不阻塞首屏
           api('template_check').then((tc) => setTplNotice(tc && (tc.added?.length || tc.updates?.length || tc.missing?.length) ? tc : null)).catch(() => {})
@@ -919,7 +920,7 @@ button.presales-badge{background:transparent;cursor:pointer}
           const c = custDetail.customer
           return h('section', { className: 'presales-card' },
             h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
-              h('div', null, h('b', null, c['客户名称']), h('div', { className: 'presales-muted' }, `${c['客户编号'] || ''} · ${c['省市'] || ''} · ${c['行业分类'] || c['行业'] || ''}`)),
+              h('div', null, h('b', null, c['客户名称']), h('div', { className: 'presales-muted' }, `${c['客户编号'] || ''} · ${c['省市'] || ''} · ${c['行业分类'] || ''}`)),
               h('div', { className: 'presales-row' },
                 h('button', { className: 'presales-btn', type: 'button', onClick: () => { setCustDetail(null); setCustForm({ ...c, id: c._id, '负责人': fmtCell(c['负责人']) }) } }, '编辑'),
                 h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustDetail(null) }, '← 返回列表'))),
@@ -936,8 +937,8 @@ button.presales-badge{background:transparent;cursor:pointer}
                 h('span', null, h('b', null, o['商机编号']), ` ${o['商机名称']}`), h('span', null, `${o['阶段'] || ''} · ${o['金额'] || 0} 万`))))) : h('div', { className: 'presales-muted' }, '暂无关联商机'))
         }
         const q = custQuery.trim().toLowerCase()
-        const industries = [...new Set(customers.map((c) => c.industryCategory || c.industry).filter(Boolean))]
-        const rows = customers.filter((c) => (!q || `${c.name} ${c.code} ${c.industryCategory || c.industry}`.toLowerCase().includes(q)) && (!custIndustry || (c.industryCategory || c.industry) === custIndustry))
+        const industries = [...new Set(customers.map((c) => c.industryCategory).filter(Boolean))]
+        const rows = customers.filter((c) => (!q || `${c.name} ${c.code} ${c.industryCategory || ''}`.toLowerCase().includes(q)) && (!custIndustry || c.industryCategory === custIndustry))
         const size = 20
         const page = Math.min(custPage, Math.max(1, Math.ceil(rows.length / size)))
         const view = rows.slice((page - 1) * size, page * size)
@@ -954,7 +955,7 @@ button.presales-badge{background:transparent;cursor:pointer}
           h('table', { className: 'presales-table', style: { marginTop: 8 } },
             h('thead', null, h('tr', null, ['客户名称', '编号', '省市', '行业', '负责人', '状态'].map((t) => h('th', { key: t }, t)))),
             h('tbody', null, view.map((c) => h('tr', { key: c.id, style: { cursor: 'pointer' }, onClick: () => void openCustomer(c.id) },
-              h('td', null, h('b', null, c.name)), h('td', null, c.code), h('td', null, c.region || '-'), h('td', null, (c.industryCategory || c.industry || '-').split('/').pop().trim()), h('td', null, fmtCell(c.owner) || '-'), h('td', null, c.status || '-'))))),
+              h('td', null, h('b', null, c.name)), h('td', null, c.code), h('td', null, c.region || '-'), h('td', null, (c.industryCategory || '-').split('/').pop().trim()), h('td', null, fmtCell(c.owner) || '-'), h('td', null, c.status || '-'))))),
           pager(rows.length, page, setCustPage, size))
       }
 
