@@ -2022,6 +2022,15 @@ for (const [idx, it] of (body.items || []).entries()) {
                 '成立时间': pick(/成立(?:日期|时间)[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}日?)/),
                 '地址': pick(/(?:注册地址|地址)[：:\s]*为?([^\n，,。；;]{6,80})/),
               }
+              if (fields['成立时间']) {
+                const dm = String(fields['成立时间']).match(/(\d{4})[年\/-](\d{1,2})[月\/-](\d{1,2})/)
+                if (dm) fields['成立时间'] = `${dm[1]}-${String(dm[2]).padStart(2, '0')}-${String(dm[3]).padStart(2, '0')}`
+              }
+              const addr = fields['地址'] || ''
+              if (addr) {
+                const rm = addr.replace(/^中国/, '').match(/^(.+?(?:特别行政区|自治区|省|市))/)
+                if (rm) fields['省市'] = rm[1]
+              }
               const industryRaw = pick(/所属行业(?:为)?([^，,。；;\n]{2,30})/)
               if (industryRaw) {
                 const hit = GB_INDUSTRIES.find((x) => industryRaw.includes(x.name) || x.name.includes(industryRaw))

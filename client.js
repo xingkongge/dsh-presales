@@ -875,6 +875,14 @@ button.presales-badge{background:transparent;cursor:pointer}
               '地址': pick(/(?:注册地址|地址)[：:\s]*为?([^\n，,。；;]{6,80})/),
             }
             for (const k of Object.keys(fields)) if (!fields[k]) delete fields[k]
+            if (fields['成立时间']) {
+              const dm = String(fields['成立时间']).match(/(\d{4})[年\/-](\d{1,2})[月\/-](\d{1,2})/)
+              if (dm) fields['成立时间'] = `${dm[1]}-${String(dm[2]).padStart(2, '0')}-${String(dm[3]).padStart(2, '0')}`
+            }
+            if (fields['地址']) {
+              const rm = String(fields['地址']).replace(/^中国/, '').match(/^(.+?(?:特别行政区|自治区|省|市))/)
+              if (rm) fields['省市'] = rm[1]
+            }
             const industryRaw = pick(/所属行业(?:为)?([^，,。；;\n]{2,30})/)
             if (industryRaw && !fields['行业分类']) {
               const hit = industryOptions.find((x) => industryRaw.includes(x.name) || x.name.includes(industryRaw))
