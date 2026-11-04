@@ -812,7 +812,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       async function lookupCustomer() {
         const name = String(custForm?.['客户名称'] || '').trim()
         if (!name) { setMsg({ kind: 'err', text: '请先填客户名称' }); return }
-        setLookupBusy(true); setMsg({ kind: 'ok', text: '正在联网查询工商信息…' })
+        setLookupBusy(true); setLookupSources([]); setMsg({ kind: 'ok', text: '正在联网查询工商信息（约 10~20 秒）…' })
         try {
           const r = await api('customer_lookup?name=' + encodeURIComponent(name) + '&region=' + encodeURIComponent(custForm['省市'] || ''))
           setCustForm({ ...custForm, ...(r.fields || {}), '信息来源': '联网检索', '来源链接': (r.sources || []).map((x) => x.url).join('\n') })
@@ -841,9 +841,10 @@ button.presales-badge{background:transparent;cursor:pointer}
               customerField('联系人', '联系人'), customerField('联系电话', '联系电话'), customerField('负责人', '负责人')),
             h('label', null, h('span', { className: 'presales-label' }, '客户简介'),
               h('textarea', { className: 'presales-input', style: { minHeight: 70 }, value: custForm['客户简介'] || '', onChange: (e) => setCustForm({ ...custForm, '客户简介': e.target.value }) })),
+            msg ? h('div', { className: `presales-msg ${msg.kind === 'ok' ? 'ok' : 'err'}` }, msg.text) : null,
             lookupSources.length ? h('div', { className: 'presales-muted', style: { marginTop: 6 } }, '来源：' + lookupSources.map((x) => x.title || x.url).join(' / ')) : null,
             h('div', { className: 'presales-row', style: { marginTop: 8 } },
-              h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void saveCustomer() }, '保存')))
+              h('button', { className: 'presales-btn primary', type: 'button', disabled: lookupBusy, onClick: () => void saveCustomer() }, lookupBusy ? '查询中…' : '保存')))
         }
         if (custDetail) {
           const c = custDetail.customer

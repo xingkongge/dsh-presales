@@ -1949,7 +1949,8 @@ export function apply(ctx, rawConfig = {}) {
               try {
                 const web = typeof ctx.get === 'function' ? ctx.get('web') : null
                 if (web && typeof web.search === 'function') {
-                  const r = await web.search({ query: q, maxResults: 5 })
+                  const signal = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') ? AbortSignal.timeout(25000) : undefined
+                  const r = await web.search({ query: q, maxResults: 5 }, signal)
                   searched = { answer: r.content || '', sources: r.sources || [] }
                 } else {
                   searched = await callHostTool('web_search', { queries: [q] })
