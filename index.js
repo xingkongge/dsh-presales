@@ -1939,6 +1939,35 @@ export function apply(ctx, rawConfig = {}) {
               return json(res, 200, { ok: true, customer: c, opportunities: relatedOpps, quotes: relatedQuotes })
             } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
           }
+          if (route === 'customer_lookup') {
+            try {
+              const name = String(url.searchParams.get('name') || '').trim()
+              const region = String(url.searchParams.get('region') || '').trim()
+              if (!name) return json(res, 400, { ok: false, error: '请先填客户名称' })
+              const q = `${name} ${region} 工商信息 法定代表人 注册资本 成立日期 注册地址`
+              let searched
+              try {
+                const web = typeof ctx.get === 'function' ? ctx.get('web') : null
+                if (web && typeof web.search === 'function') {
+                  const r = await web.search({ query: q, maxResults: 5 })
+                  searched = { answer: r.content || '', sources: r.sources || [] }
+                } else {
+                  searched = await callHostTool('web_search', { queries: [q] })
+                }
+              } catch (e) { return json(res, 500, { ok: false, error: `联网搜索不可用：${e.message}` }) }
+              const sources = (searched.sources || []).slice(0, 5).map((x) => ({ title: x.title, url: x.url, snippet: x.snippet || '' }))
+              const text = [searched.answer || searched.content || '', ...sources.map((x) => x.snippet || '')].join('\n')
+              const pick = (re) => { const m = text.match(re); return m ? m[1].trim().replace(/[，,。；;]$/, '') : '' }
+              const fields = {
+                '法定代表人': pick(/法定代表人[：:\s]*([^\s，,。；;\n]{2,12})/),
+                '注册资本': pick(/注册资本[：:\s]*([0-9.,]+[万亿]?[元人民币]*)/),
+                '成立时间': pick(/成立(?:日期|时间)[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}日?)/),
+                '地址': pick(/(?:注册地址|地址)[：:\s]*([^\n，,。；;]{6,80})/),
+              }
+              for (const k of Object.keys(fields)) if (!fields[k]) delete fields[k]
+              return json(res, 200, { ok: true, fields, sources, answer: String(searched.answer || '').slice(0, 1200), note: '联网结果仅供核对，需人工确认后保存' })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
           if (route === 'customer_save' && req.method === 'POST') {
             try {
               const body = await readBody(req)

@@ -324,6 +324,8 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [custDetail, setCustDetail] = React.useState(null)
       const [custForm, setCustForm] = React.useState(null)
       const [custQuery, setCustQuery] = React.useState('')
+      const [lookupBusy, setLookupBusy] = React.useState(false)
+      const [lookupSources, setLookupSources] = React.useState([])
       const [selected, setSelected] = React.useState({})
       const [mailQueue, setMailQueue] = React.useState([])
       const fileRef = React.useRef(null)
@@ -807,6 +809,19 @@ button.presales-badge{background:transparent;cursor:pointer}
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
 
+      async function lookupCustomer() {
+        const name = String(custForm?.['客户名称'] || '').trim()
+        if (!name) { setMsg({ kind: 'err', text: '请先填客户名称' }); return }
+        setLookupBusy(true); setMsg({ kind: 'ok', text: '正在联网查询工商信息…' })
+        try {
+          const r = await api('customer_lookup?name=' + encodeURIComponent(name) + '&region=' + encodeURIComponent(custForm['省市'] || ''))
+          setCustForm({ ...custForm, ...(r.fields || {}), '信息来源': '联网检索', '来源链接': (r.sources || []).map((x) => x.url).join('\n') })
+          setLookupSources(r.sources || [])
+          const n = Object.keys(r.fields || {}).length
+          setMsg({ kind: n ? 'ok' : 'err', text: n ? `已填入 ${n} 个字段，请核对后保存` : '没有检索到可用的工商字段，请手动填写' })
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setLookupBusy(false) }
+      }
+
       function customerField(key, label, type = 'text') {
         return h('label', null, h('span', { className: 'presales-label' }, label),
           h('input', { className: 'presales-input', type, value: custForm?.[key] ?? '', onChange: (e) => setCustForm({ ...custForm, [key]: e.target.value }) }))
@@ -819,11 +834,14 @@ button.presales-badge{background:transparent;cursor:pointer}
               h('b', null, custForm.id ? '编辑客户' : '新建客户'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustForm(null) }, '取消')),
             h('div', { className: 'presales-grid', style: { marginTop: 8 } },
-              customerField('客户名称', '客户名称'), customerField('省市', '省市'), customerField('行业门类一级', '行业门类一级'), customerField('行业门类二级', '行业门类二级'),
+              h('label', null, h('span', { className: 'presales-label' }, h('span', null, '客户名称 '), h('button', { className: 'presales-btn', type: 'button', style: { padding: '2px 8px', fontSize: 12 }, disabled: lookupBusy, onClick: () => void lookupCustomer() }, lookupBusy ? '查询中…' : '联网查询')),
+                h('input', { className: 'presales-input', value: custForm?.['客户名称'] ?? '', onChange: (e) => setCustForm({ ...custForm, '客户名称': e.target.value }) })),
+              customerField('省市', '省市'), customerField('行业门类一级', '行业门类一级'), customerField('行业门类二级', '行业门类二级'),
               customerField('法定代表人', '法定代表人'), customerField('注册资本', '注册资本'), customerField('成立时间', '成立时间', 'date'), customerField('地址', '地址'),
               customerField('联系人', '联系人'), customerField('联系电话', '联系电话'), customerField('负责人', '负责人')),
             h('label', null, h('span', { className: 'presales-label' }, '客户简介'),
               h('textarea', { className: 'presales-input', style: { minHeight: 70 }, value: custForm['客户简介'] || '', onChange: (e) => setCustForm({ ...custForm, '客户简介': e.target.value }) })),
+            lookupSources.length ? h('div', { className: 'presales-muted', style: { marginTop: 6 } }, '来源：' + lookupSources.map((x) => x.title || x.url).join(' / ')) : null,
             h('div', { className: 'presales-row', style: { marginTop: 8 } },
               h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void saveCustomer() }, '保存')))
         }
