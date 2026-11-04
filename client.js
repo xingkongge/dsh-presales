@@ -311,6 +311,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [tempOpen, setTempOpen] = React.useState(false)
       const [tempForm, setTempForm] = React.useState({ name: '', spec: '', brand: '', model: '', unit: '项', qty: 1, price: '' })
       const [tempRfq, setTempRfq] = React.useState(true)
+      const [baseQuote, setBaseQuote] = React.useState(null)
       const [mailPreview, setMailPreview] = React.useState(null)
       const [mailAccounts, setMailAccounts] = React.useState([])
       const [mailFrom, setMailFrom] = React.useState(() => localStorage.getItem('presales.lastRfqFrom') || '')
@@ -569,23 +570,43 @@ button.presales-badge{background:transparent;cursor:pointer}
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setBusy(false) }
       }
 
+      const cartItemsPayload = () => cart.map((x) => x.temp
+        ? ({ temp: true, code: x.code, name: x.name, spec: x.spec, brand: x.brand, model: x.model, unit: x.unit, qty: Number(x.qty) || 0, price: Number(x.stdPrice) || 0, section: x.section || '', category: x.category || '', remark: x.remark || '', taxRate: Number(x.taxRate) || 0.13 })
+        : ({ code: x.code, qty: Number(x.qty) || 0, discount: Number(x.discount) || 1, section: x.section || '', brand: x.brand, model: x.model, unit: x.unit, name: x.name, spec: x.spec, category: x.category || '', remark: x.remark || '', taxRate: Number(x.taxRate) || 0.13, stdPrice: Number(x.stdPrice) }))
+
+      async function reuseLastQuote() {
+        if (!opp) { setMsg({ kind: 'err', text: '请先选择商机' }); return }
+        try {
+          const r = await api('quote_latest?opportunityNo=' + encodeURIComponent(opp.no) + '&customerName=' + encodeURIComponent(customer?.name || ''))
+          if (!r.quote) { setMsg({ kind: 'err', text: '该商机还没有报价单，先做第一轮' }); return }
+          setCart((r.quote.lines || []).map((l, i) => ({
+            uid: `base-${Date.now()}-${i}`, code: l.code, name: l.name, spec: l.spec || '', brand: l.brand || '', model: l.model || '',
+            unit: l.unit || '', stdPrice: Number(l.stdPrice) || 0, taxRate: Number(l.taxRate) || 0.13,
+            qty: Number(l.qty) || 1, discount: Number(l.discount) || 1, section: l.section || section,
+            category: l.category || '', remark: l.remark || '', temp: String(l.lineType || '').includes('临时'),
+          })))
+          setBaseQuote({ quoteNo: r.quote.quoteNo, version: r.quote.currentVersion })
+          setMsg({ kind: 'ok', text: `已载入 ${r.quote.quoteNo} ${r.quote.currentVersion}，保存后生成下一版本` })
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+      }
+
       async function save() {
         if (!customer) { setMsg({ kind: 'err', text: '请先选择客户' }); return }
         if (!cart.length) { setMsg({ kind: 'err', text: '请先添加产品' }); return }
         setBusy(true); setMsg(null)
         try {
-          const r = await api('save', {
-            method: 'POST',
-            body: JSON.stringify({
-              customerName: customer.name, customerNo: customer.code || '',
-              opportunityNo: opp ? opp.no : '', template,
-              localTemplateId: localTpl ? localTpl.id : '',
-              localTemplateName: localTpl ? localTpl.name : '',
-              items: cart.map((x) => x.temp ? ({ temp: true, code: x.code, name: x.name, spec: x.spec, brand: x.brand, model: x.model, unit: x.unit, qty: Number(x.qty) || 0, price: Number(x.stdPrice) || 0, section: x.section || '', category: x.category || '', remark: x.remark || '', taxRate: Number(x.taxRate) || 0.13 }) : ({ code: x.code, qty: Number(x.qty) || 0, discount: Number(x.discount) || 1, section: x.section || '', brand: x.brand, model: x.model, unit: x.unit, name: x.name, spec: x.spec, category: x.category || '', remark: x.remark || '', taxRate: Number(x.taxRate) || 0.13, stdPrice: Number(x.stdPrice) })),
-            }),
-          })
-          setMsg({ kind: 'ok', text: `已生成 ${r.quoteNo}（含税 ${money(r.grossTotal)}）`, link: r.link || '' })
+          const useRevision = baseQuote && opp
+          const r = useRevision
+            ? await api('quote_revise', { method: 'POST', body: JSON.stringify({ quoteNo: baseQuote.quoteNo, items: cartItemsPayload(), note: '' }) })
+            : await api('save', {
+              method: 'POST', body: JSON.stringify({
+                customerName: customer.name, customerNo: customer.code || '', opportunityNo: opp ? opp.no : '', template,
+                localTemplateId: localTpl ? localTpl.id : '', localTemplateName: localTpl ? localTpl.name : '', items: cartItemsPayload(),
+              }),
+            })
+          setMsg({ kind: 'ok', text: useRevision ? `已生成 ${r.quoteNo} ${r.version}（含税 ${money(r.grossTotal)}）` : `已生成 ${r.quoteNo}（含税 ${money(r.grossTotal)}）`, link: r.link || '' })
           setLastQuote({ no: r.quoteNo, link: r.link || '', gross: r.grossTotal })
+          setBaseQuote(null)
           setCart([])
           const qs = await api('quotes'); setQuotes(qs.items || [])
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setBusy(false) }
@@ -1026,6 +1047,10 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('label', null, h('span', { className: 'presales-label' }, '报价模板'), h('select', {
               className: 'presales-select', value: template, onChange: (e) => setTemplate(e.target.value),
             }, templates.map((t) => h('option', { key: t.name, value: t.name }, `${t.name}${t.default ? '（默认）' : ''}`)))))),
+          h('div', { className: 'presales-row', style: { marginTop: 8 } },
+            h('button', { className: 'presales-btn', type: 'button', disabled: !opp, onClick: () => void reuseLastQuote() },
+              baseQuote ? `已载入 ${baseQuote.quoteNo} ${baseQuote.version}，保存生成下一版` : '复用上一轮报价'),
+            h('span', { className: 'presales-muted' }, '载入后按上一轮明细编辑，保存自动生成 V2/V3')),
           tplNotice ? h('div', { className: 'presales-row', style: { marginTop: 8, color: 'var(--dsw-alias-label-secondary)' } },
             h('span', null, `模板文件有变化：新增 ${tplNotice.added?.length || 0} · 变更 ${tplNotice.updates?.length || 0} · 缺失 ${tplNotice.missing?.length || 0}`),
             h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void syncTemplates() }, '同步模板记录')) : null,

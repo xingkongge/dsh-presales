@@ -1500,7 +1500,7 @@ export function apply(ctx, rawConfig = {}) {
     const [quotes, versions, items] = await Promise.all([list('quotes'), list('quoteVersions'), list('quoteItems')])
     const q = quotes.find((x) => x['报价单号'] === quoteNo)
     if (!q) throw new Error(`未找到报价单 ${quoteNo}`)
-    const vs = versions.find((v) => (v['报价单'] || []).includes(q._id))
+    const vs = versions.filter((v) => (v['报价单'] || []).includes(q._id)).sort((a, b) => Number(a['版本号']) - Number(b['版本号'])).pop()
     const its = items.filter((i) => (i['报价版本'] || []).includes(vs?._id))
     const catalog = await loadCatalog().catch(() => [])
     const byCode = new Map(catalog.map((p) => [p.code, p]))
@@ -1513,6 +1513,7 @@ export function apply(ctx, rawConfig = {}) {
       grossUnit: Number(i['含税单价']) || 0, grossSubtotal: Number(i['含税小计']) || 0,
       costSubtotal: 0, section: i['分节'] || '一、产品报价', remark: i['备注'] || '',
       category: byCode.get(i['产品编码'])?.l2 || '',
+      lineType: i['行类型'] || '目录产品', rfqNo: i['询价编号'] || '', priceStatus: i['价格状态'] || '已定价',
     }))
     return {
       customerName: q['客户名称'] || '', customerNo: q['客户编号'] || '', opportunityNo: q['商机编号'] || '',
@@ -1547,6 +1548,55 @@ export function apply(ctx, rawConfig = {}) {
   registerPresalesSkill()
 
   // ── Web 面板接口（同源，带自定义头） ──────────────────────
+  async function buildQuoteLinesFromItems(inputItems) {
+const catalog = await loadCatalog()
+const lines = []
+const violations = []
+for (const [idx, it] of (body.items || []).entries()) {
+  let p
+  if (it.temp) {
+    p = {
+      id: `temp-${idx}`, code: it.code || `TMP-${Date.now()}-${idx}`, name: it.name || '临时产品',
+      spec: it.spec || '', brand: it.brand || '', model: it.model || '', unit: it.unit || '项',
+      stdPrice: Number(it.price) || 0, costPrice: 0, taxRate: 0.13, minDiscount: 0, modules: [], l2: '', status: '在售',
+    }
+  } else {
+    const found = findProduct(catalog, it.code || it.name)
+    if (found.error) { violations.push({ level: 'block', message: `${it.code || it.name}：${found.error}` }); continue }
+    if (found.candidates) { violations.push({ level: 'block', message: `「${it.code || it.name}」匹配到多个产品` }); continue }
+    p = found.product
+    if (it.name !== undefined) p = { ...p, name: it.name }
+    if (it.brand !== undefined) p = { ...p, brand: it.brand }
+    if (it.model !== undefined) p = { ...p, model: it.model }
+    if (it.spec !== undefined) p = { ...p, spec: it.spec }
+    if (it.unit !== undefined) p = { ...p, unit: it.unit }
+    if (it.category !== undefined) p = { ...p, l2: it.category }
+    if (it.taxRate !== undefined) p = { ...p, taxRate: Number(it.taxRate) || p.taxRate }
+    if (it.stdPrice !== undefined) p = { ...p, stdPrice: Number(it.stdPrice) }
+  }
+  const qty = Number(it.qty) || 0
+  const discount = Number(it.discount) || 1
+  const expanded = expandProduct(p, { qty, discount, modules: it.modules, section: it.section || '' })
+  for (const e of expanded) {
+    if (!it.temp) {
+      for (const v of validateLine({ product: { ...p, name: e.name, stdPrice: e.stdPrice, costPrice: e.costPrice }, qty, discount, today: today() })) {
+        if (v.level === 'block') violations.push({ product: p.code, ...v })
+      }
+    }
+    const money = computeLine({ stdPrice: e.stdPrice, costPrice: e.costPrice, discount, qty, taxRate: e.taxRate })
+    lines.push({
+      lineNo: lines.length + 1, code: e.code, name: e.name, spec: e.spec, brand: e.brand, model: e.model, unit: e.unit, qty, discount,
+      stdPrice: e.stdPrice, ...money, section: e.section,
+      lineType: it.temp ? '临时产品' : '目录产品',
+      rfqNo: it.rfqNo || '',
+      priceStatus: it.temp ? (Number(it.price) > 0 ? '暂估' : '待询价') : '已定价',
+      remark: it.remark || (it.temp ? `临时产品（${it.rfqNo || '待询价'}）` : (e.remark || '')), category: e.category,
+    })
+  }
+}
+    return { lines, violations }
+  }
+
   async function persistQuote(dto, opts = {}) {
     const quotes = await list('quotes')
     const year = new Date().getFullYear()
@@ -2115,53 +2165,61 @@ export function apply(ctx, rawConfig = {}) {
             const out = await renderQuoteXlsx(loaded, loaded.meta)
             return json(res, 200, { ok: true, ...out })
           }
+          if (route === 'quote_latest') {
+            try {
+              const oppNo = String(url.searchParams.get('opportunityNo') || '')
+              const customerName = String(url.searchParams.get('customerName') || '')
+              const quotes = await list('quotes')
+              const q = quotes.filter((x) => (oppNo && x['商机编号'] === oppNo) || (!oppNo && customerName && x['客户名称'] === customerName)).slice(-1)[0]
+              if (!q) return json(res, 200, { ok: true, quote: null })
+              const dto = await loadQuoteDto(q['报价单号'])
+              return json(res, 200, { ok: true, quote: { quoteNo: q['报价单号'], currentVersion: q['当前版本'] || 'V1', template: q['模板'] || '', lines: dto.lines } })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'quote_revise' && req.method === 'POST') {
+            try {
+              const b = await readBody(req)
+              const quoteNo = String(b.quoteNo || '')
+              const [quotes, versions] = await Promise.all([list('quotes'), list('quoteVersions')])
+              const q = quotes.find((x) => x['报价单号'] === quoteNo)
+              if (!q) return json(res, 404, { ok: false, error: '报价单不存在' })
+              const vs = versions.filter((v) => (v['报价单'] || []).includes(q._id)).sort((a, c) => Number(a['版本号']) - Number(c['版本号']))
+              const last = vs[vs.length - 1]
+              const nextNo = (Number(last?.['版本号']) || 1) + 1
+              const prevDto = await loadQuoteDto(quoteNo)
+              const { lines, violations } = await buildQuoteLinesFromItems(b.items || [])
+              if (violations.length) return json(res, 400, { ok: false, error: violations.map((v) => v.message).join('；') })
+              const dto = buildQuoteDto({ lines, meta: { customerName: q['客户名称'] || '', customerNo: q['客户编号'] || '', opportunityNo: q['商机编号'] || '', opportunityName: q['商机名称'] || '' } })
+              const changes = diffLines(prevDto.lines, lines)
+              const version = `V${nextNo}`
+              const changeText = [changes.join('；'), b.note || ''].filter(Boolean).join('；') || '重出报价单'
+              const [versionId] = await create('quoteVersions', [{
+                '版本标识': `${quoteNo}-${version}`, '报价单': [q._id], '报价单号': quoteNo, '版本号': nextNo,
+                '状态': '草稿', '模板': q['模板'] || '', '提交时间': today(), '有效期至': last?.['有效期至'] || '',
+                '不含税合计': dto.totals.untaxedTotal, '税额合计': dto.totals.taxTotal, '含税合计': dto.totals.grossTotal,
+                '成本合计': dto.totals.costTotal, '毛利额': dto.totals.profit, '毛利率': dto.totals.margin ?? '', '变更说明': changeText,
+              }])
+              await create('quoteItems', lines.map((l) => ({
+                '行标识': `${quoteNo}-${version}-${String(l.lineNo).padStart(2, '0')}`, '报价版本': [versionId], '版本标识': `${quoteNo}-${version}`,
+                '序号': l.lineNo, '分节': l.section || '一、产品报价', '产品编码': l.code, '产品名称': l.name,
+                '规格': l.spec, '品牌': l.brand, '型号': l.model, '单位': l.unit, '数量': l.qty,
+                '标准未税单价': l.stdPrice, '折扣': l.discount, '不含税单价': l.untaxedUnit, '税率': l.taxRate,
+                '税额': l.tax, '含税单价': l.grossUnit, '不含税小计': l.untaxedSubtotal, '含税小计': l.grossSubtotal, '备注': l.remark || '',
+                '行类型': l.lineType || '目录产品', '询价编号': l.rfqNo || '', '价格状态': l.priceStatus || '已定价',
+              })))
+              let link = ''
+              try {
+                const rendered = await renderByTemplate(dto, { quoteNo, version, date: today(), customerName: dto.customerName, validUntil: last?.['有效期至'] || '' }, q['模板'])
+                link = rendered.link || ''
+                await updateRecord('quotes', q._id, { '当前版本': version, '不含税合计': dto.totals.untaxedTotal, '税额合计': dto.totals.taxTotal, '含税合计': dto.totals.grossTotal, '毛利率': dto.totals.margin ?? '', '文件链接': link })
+                await registerDocument({ quoteNo, version, customerName: dto.customerName, opportunityNo: dto.opportunityNo, opportunityName: dto.opportunityName, fileName: rendered.name, link })
+              } catch { /* 出单失败不影响版本 */ }
+              return json(res, 200, { ok: true, quoteNo, version, link, grossTotal: dto.totals.grossTotal, changes: changeText })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
           if (route === 'save' && req.method === 'POST') {
             const body = await readBody(req)
-            const catalog = await loadCatalog()
-            const lines = []
-            const violations = []
-            for (const [idx, it] of (body.items || []).entries()) {
-              let p
-              if (it.temp) {
-                p = {
-                  id: `temp-${idx}`, code: it.code || `TMP-${Date.now()}-${idx}`, name: it.name || '临时产品',
-                  spec: it.spec || '', brand: it.brand || '', model: it.model || '', unit: it.unit || '项',
-                  stdPrice: Number(it.price) || 0, costPrice: 0, taxRate: 0.13, minDiscount: 0, modules: [], l2: '', status: '在售',
-                }
-              } else {
-                const found = findProduct(catalog, it.code || it.name)
-                if (found.error) { violations.push({ level: 'block', message: `${it.code || it.name}：${found.error}` }); continue }
-                if (found.candidates) { violations.push({ level: 'block', message: `「${it.code || it.name}」匹配到多个产品` }); continue }
-                p = found.product
-                if (it.name !== undefined) p = { ...p, name: it.name }
-                if (it.brand !== undefined) p = { ...p, brand: it.brand }
-                if (it.model !== undefined) p = { ...p, model: it.model }
-                if (it.spec !== undefined) p = { ...p, spec: it.spec }
-                if (it.unit !== undefined) p = { ...p, unit: it.unit }
-                if (it.category !== undefined) p = { ...p, l2: it.category }
-                if (it.taxRate !== undefined) p = { ...p, taxRate: Number(it.taxRate) || p.taxRate }
-                if (it.stdPrice !== undefined) p = { ...p, stdPrice: Number(it.stdPrice) }
-              }
-              const qty = Number(it.qty) || 0
-              const discount = Number(it.discount) || 1
-              const expanded = expandProduct(p, { qty, discount, modules: it.modules, section: it.section || '' })
-              for (const e of expanded) {
-                if (!it.temp) {
-                  for (const v of validateLine({ product: { ...p, name: e.name, stdPrice: e.stdPrice, costPrice: e.costPrice }, qty, discount, today: today() })) {
-                    if (v.level === 'block') violations.push({ product: p.code, ...v })
-                  }
-                }
-                const money = computeLine({ stdPrice: e.stdPrice, costPrice: e.costPrice, discount, qty, taxRate: e.taxRate })
-                lines.push({
-                  lineNo: lines.length + 1, code: e.code, name: e.name, spec: e.spec, brand: e.brand, model: e.model, unit: e.unit, qty, discount,
-                  stdPrice: e.stdPrice, ...money, section: e.section,
-                  lineType: it.temp ? '临时产品' : '目录产品',
-                  rfqNo: it.rfqNo || '',
-                  priceStatus: it.temp ? (Number(it.price) > 0 ? '暂估' : '待询价') : '已定价',
-                  remark: it.remark || (it.temp ? `临时产品（${it.rfqNo || '待询价'}）` : (e.remark || '')), category: e.category,
-                })
-              }
-            }
+            const { lines, violations } = await buildQuoteLinesFromItems(body.items || [])
             if (violations.length) return json(res, 400, { ok: false, error: violations.map((v) => v.message).join('；') })
             const dto = buildQuoteDto({ lines, meta: { customerName: body.customerName || '', customerNo: body.customerNo || '', opportunityNo: body.opportunityNo || '' } })
             const out = await persistQuote(dto, { template: body.template })
