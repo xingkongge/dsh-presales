@@ -390,7 +390,7 @@ export function apply(ctx, rawConfig = {}) {
       properties: {
         name: { type: 'string' }, region: { type: 'string' }, industry: { type: 'string', description: '行业分类（GB/T 4754-2017 门类/大类）' }, industryCategory: { type: 'string' },
         legal: { type: 'string' }, capital: { type: 'string' }, founded: { type: 'string' }, address: { type: 'string' },
-        contact: { type: 'string' }, phone: { type: 'string' }, intro: { type: 'string' }, owner: { type: 'string' },
+        intro: { type: 'string' },
         source: { type: 'string', description: '信息来源，如 企查查' }, sourceUrl: { type: 'string' }, creator: { type: 'string' },
       },
       required: ['name'],
@@ -402,8 +402,7 @@ export function apply(ctx, rawConfig = {}) {
         '客户编号': no, '客户名称': args.name, '省市': args.region || '',
         '行业分类': args.industryCategory || args.industry || '', '法定代表人': args.legal || '',
         '注册资本': args.capital || '', '成立时间': args.founded || '', '地址': args.address || '',
-        '联系人': args.contact || '', '联系电话': args.phone || '', '客户简介': args.intro || '',
-        '负责人': args.owner || '', '创建人': args.creator || '', '状态': '正常',
+        '客户简介': args.intro || '', '创建人': args.creator || '', '状态': '正常',
         '信息来源': args.source || '', '来源链接': args.sourceUrl || '',
       }
       const clean = {}
@@ -2038,13 +2037,19 @@ for (const [idx, it] of (body.items || []).entries()) {
               }
               for (const k of Object.keys(fields)) if (!fields[k]) delete fields[k]
               if (!fields['客户简介']) {
+                const biz = pick(/经营范围[：:\s]*([^\n]{10,200})/) || pick(/主营业务[：:\s]*([^\n]{10,200})/)
+                const sentences = text.split(/[。\n]/).map((x) => x.trim()).filter((x) => x.length >= 8 && x.length <= 120)
+                const safety = sentences.find((x) => x.includes('安全生产') && !/法定代表人|注册资本|注册地址|成立日期/.test(x))
+                const tech = sentences.find((x) => /(数字化|智能化|信息化|软件|系统集成|解决方案)/.test(x) && !/法定代表人|注册资本|注册地址|成立日期/.test(x))
                 const parts = []
-                if (fields['成立时间']) { const m = fields['成立时间'].match(/^(\d{4})-(\d{2})-(\d{2})$/); if (m) parts.push(`成立于${m[1]}年${Number(m[2])}月${Number(m[3])}日`) }
-                if (fields['法定代表人']) parts.push(`法定代表人${fields['法定代表人']}`)
-                if (fields['注册资本']) parts.push(`注册资本${fields['注册资本']}`)
-                if (fields['地址']) parts.push(`注册地址位于${fields['地址']}`)
-                if (fields['行业分类']) parts.push(`所属行业为${String(fields['行业分类']).split('/').pop().trim()}`)
-                if (parts.length) fields['客户简介'] = `${name}，${parts.join('，')}。`
+                if (biz) parts.push(`${name}主要从事${biz.replace(/[，,。；;]$/, '')}。`)
+                if (safety && (biz ? !biz.includes('安全生产') : true)) parts.push(`${safety.replace(/^[^，。]*?公司/, name)}。`)
+                if (!parts.length && tech) parts.push(`${tech.replace(/^[^，。]*?公司/, name)}。`)
+                if (!parts.length) {
+                  const ind = fields['行业分类'] ? String(fields['行业分类']).split('/').pop().trim() : ''
+                  parts.push(`${name}是一家${ind ? '从事' + ind + '相关业务' : '专注于行业数字化'}的企业。`)
+                }
+                fields['客户简介'] = parts.join('')
               }
               return json(res, 200, { ok: true, fields, sources, answer: String(searched.answer || '').slice(0, 1200), note: '联网结果仅供核对，需人工确认后保存' })
             } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
@@ -2055,7 +2060,7 @@ for (const [idx, it] of (body.items || []).entries()) {
               if (!String(body['客户名称'] || '').trim()) return json(res, 400, { ok: false, error: '客户名称必填' })
               if (body.id) {
                 const patch = {}
-                for (const k of ['客户名称','省市','行业分类','法定代表人','注册资本','成立时间','地址','联系人','联系电话','客户简介','负责人','状态']) {
+                for (const k of ['客户名称','省市','行业分类','法定代表人','注册资本','成立时间','地址','客户简介','创建人','状态']) {
                   if (body[k] !== undefined) patch[k] = body[k]
                 }
                 await updateRecord('customers', body.id, patch)
@@ -2073,8 +2078,7 @@ for (const [idx, it] of (body.items || []).entries()) {
                 '客户编号': no, '客户名称': String(body['客户名称']).trim(),
                 '省市': body['省市'] || '',
                 '行业分类': body['行业分类'] || '', '法定代表人': body['法定代表人'] || '', '注册资本': body['注册资本'] || '',
-                '成立时间': body['成立时间'] || '', '地址': body['地址'] || '', '联系人': body['联系人'] || '',
-                '联系电话': body['联系电话'] || '', '客户简介': body['客户简介'] || '', '负责人': body['负责人'] || '',
+                '成立时间': body['成立时间'] || '', '地址': body['地址'] || '', '客户简介': body['客户简介'] || '', '创建人': body['创建人'] || '',
                 '创建人': body['创建人'] || '', '状态': body['状态'] || '正常',
               }
               const clean = {}
@@ -2108,7 +2112,7 @@ for (const [idx, it] of (body.items || []).entries()) {
               return json(res, 200, {
                 ok: true,
                 status: { ok: true, counts: { products: products.length, customers: customers.length, opportunities: opportunities.length, quotes: quotes.length, quoteTemplates: templates.length } },
-                customers: customers.map((c) => ({ id: c._id, code: c['客户编号'] || '', name: c['客户名称'] || '', region: c['省市'] || '', industryCategory: c['行业分类'] || '', legal: c['法定代表人'] || '', capital: c['注册资本'] || '', founded: c['成立时间'] || '', address: c['地址'] || '', contact: c['联系人'] || '', phone: c['联系电话'] || '', intro: c['客户简介'] || '', owner: Array.isArray(c['负责人']) ? c['负责人'].map((x) => (x && typeof x === 'object' ? (x.name || x.id || '') : x)).join('、') : (c['负责人'] || ''), creator: c['创建人'] || '', createdAt: c['创建时间'] || '', status: c['状态'] || '' })),
+                customers: customers.map((c) => ({ id: c._id, code: c['客户编号'] || '', name: c['客户名称'] || '', region: c['省市'] || '', industryCategory: c['行业分类'] || '', legal: c['法定代表人'] || '', capital: c['注册资本'] || '', founded: c['成立时间'] || '', address: c['地址'] || '', intro: c['客户简介'] || '', creator: c['创建人'] || '', createdAt: c['创建时间'] || '', status: c['状态'] || '' })),
                 templates: templates.filter((t) => t['启用状态'] === '启用').map((t) => ({ name: t['模板名称'], type: t['模板类型'], default: Boolean(t['默认模板']), fileId: t['文件ID'] || '' })),
                 quotes: quotes.slice(-10).reverse().map((q) => ({ quoteNo: q['报价单号'], customerName: q['客户名称'] || '', status: q['状态'] || '', grossTotal: Number(q['含税合计']) || 0, version: q['当前版本'] || '', link: q['文件链接'] || '' })),
                 categories: tree,

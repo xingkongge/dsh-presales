@@ -889,13 +889,17 @@ button.presales-badge{background:transparent;cursor:pointer}
               if (hit) fields['行业分类'] = `${hit.group} ${hit.groupName} / ${hit.code} ${hit.name}`
             }
             if (!fields['客户简介']) {
+              const biz = pick(/经营范围[：:\s]*([^\n]{10,200})/) || pick(/主营业务[：:\s]*([^\n]{10,200})/)
+              const sentences = text.split(/[。\n]/).map((x) => x.trim()).filter((x) => x.length >= 8 && x.length <= 120)
+              const safety = sentences.find((x) => x.includes('安全生产') && !/法定代表人|注册资本|注册地址|成立日期/.test(x))
               const parts = []
-              if (fields['成立时间']) { const m = fields['成立时间'].match(/^(\d{4})-(\d{2})-(\d{2})$/); if (m) parts.push(`成立于${m[1]}年${Number(m[2])}月${Number(m[3])}日`) }
-              if (fields['法定代表人']) parts.push(`法定代表人${fields['法定代表人']}`)
-              if (fields['注册资本']) parts.push(`注册资本${fields['注册资本']}`)
-              if (fields['地址']) parts.push(`注册地址位于${fields['地址']}`)
-              if (fields['行业分类']) parts.push(`所属行业为${String(fields['行业分类']).split('/').pop().trim()}`)
-              if (parts.length) fields['客户简介'] = `${name}，${parts.join('，')}。`
+              if (biz) parts.push(`${name}主要从事${biz.replace(/[，,。；;]$/, '')}。`)
+              if (safety && (biz ? !biz.includes('安全生产') : true)) parts.push(`${safety.replace(/^[^，。]*?公司/, name)}。`)
+              if (!parts.length) {
+                const ind = fields['行业分类'] ? String(fields['行业分类']).split('/').pop().trim() : ''
+                parts.push(`${name}是一家${ind ? '从事' + ind + '相关业务' : '专注于行业数字化'}的企业。`)
+              }
+              fields['客户简介'] = parts.join('')
             }
           }
           setCustForm({ ...custForm, ...fields, '信息来源': '联网检索', '来源链接': (r.sources || []).map((x) => x.url).join('\n') })
@@ -925,7 +929,7 @@ button.presales-badge{background:transparent;cursor:pointer}
                   [...new Set(industryOptions.map((x) => `${x.group} ${x.groupName}`))].map((g) => h('optgroup', { key: g, label: g },
                     industryOptions.filter((x) => `${x.group} ${x.groupName}` === g).map((x) => h('option', { key: x.code, value: `${x.group} ${x.groupName} / ${x.code} ${x.name}` }, `${x.code} ${x.name}`)))))),
               customerField('法定代表人', '法定代表人'), customerField('注册资本', '注册资本'), customerField('成立时间', '成立时间', 'text', 'YYYY-MM-DD'), customerField('地址', '地址'),
-              customerField('联系人', '联系人'), customerField('联系电话', '联系电话'), customerField('负责人', '负责人')),
+              customerField('创建人', '创建人')),
             h('label', null, h('span', { className: 'presales-label' }, '客户简介'),
               h('textarea', { className: 'presales-input', style: { minHeight: 70 }, value: custForm['客户简介'] || '', onChange: (e) => setCustForm({ ...custForm, '客户简介': e.target.value }) })),
             msg ? h('div', { className: `presales-msg ${msg.kind === 'ok' ? 'ok' : 'err'}` }, msg.text) : null,
@@ -939,14 +943,14 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
               h('div', null, h('b', null, c['客户名称']), h('div', { className: 'presales-muted' }, `${c['客户编号'] || ''} · ${c['省市'] || ''} · ${c['行业分类'] || ''}`)),
               h('div', { className: 'presales-row' },
-                h('button', { className: 'presales-btn', type: 'button', onClick: () => { setCustDetail(null); setCustForm({ ...c, id: c._id, '负责人': fmtCell(c['负责人']) }) } }, '编辑'),
+                h('button', { className: 'presales-btn', type: 'button', onClick: () => { setCustDetail(null); setCustForm({ ...c, id: c._id, '创建人': fmtCell(c['创建人']) }) } }, '编辑'),
                 h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustDetail(null) }, '← 返回列表'))),
             h('div', { className: 'presales-grid', style: { marginTop: 10 } },
               h('div', null, h('div', { className: 'presales-label' }, '法定代表人'), c['法定代表人'] || '-'),
               h('div', null, h('div', { className: 'presales-label' }, '注册资本'), c['注册资本'] || '-'),
               h('div', null, h('div', { className: 'presales-label' }, '成立时间'), c['成立时间'] || '-'),
-              h('div', null, h('div', { className: 'presales-label' }, '负责人'), fmtCell(c['负责人']) || '-')),
-            h('div', { className: 'presales-muted', style: { marginTop: 8 } }, `地址：${c['地址'] || '-'} · 联系人：${c['联系人'] || '-'} ${c['联系电话'] || ''}`),
+              h('div', null, h('div', { className: 'presales-label' }, '创建人'), fmtCell(c['创建人']) || '-')),
+            h('div', { className: 'presales-muted', style: { marginTop: 8 } }, `地址：${c['地址'] || '-'}`),
             c['客户简介'] ? h('div', { style: { marginTop: 8 } }, c['客户简介']) : null,
             h('div', { className: 'presales-label', style: { marginTop: 12 } }, `关联商机（${custDetail.opportunities.length}）`),
             custDetail.opportunities.length ? h('ul', { className: 'presales-list' }, custDetail.opportunities.map((o) => h('li', { key: o._id },
@@ -970,9 +974,9 @@ button.presales-badge{background:transparent;cursor:pointer}
               h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustForm({ '客户名称': '', '状态': '正常' }) }, '新建客户'),
               h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void newCustomerChat() }, '新建客户（对话）'))),
           h('table', { className: 'presales-table', style: { marginTop: 8 } },
-            h('thead', null, h('tr', null, ['客户名称', '编号', '省市', '行业', '负责人', '状态'].map((t) => h('th', { key: t }, t)))),
+            h('thead', null, h('tr', null, ['客户名称', '编号', '省市', '行业', '创建人', '状态'].map((t) => h('th', { key: t }, t)))),
             h('tbody', null, view.map((c) => h('tr', { key: c.id, style: { cursor: 'pointer' }, onClick: () => void openCustomer(c.id) },
-              h('td', null, h('b', null, c.name)), h('td', null, c.code), h('td', null, c.region || '-'), h('td', null, (c.industryCategory || '-').split('/').pop().trim()), h('td', null, fmtCell(c.owner) || '-'), h('td', null, c.status || '-'))))),
+              h('td', null, h('b', null, c.name)), h('td', null, c.code), h('td', null, c.region || '-'), h('td', null, (c.industryCategory || '-').split('/').pop().trim()), h('td', null, fmtCell(c.creator) || '-'), h('td', null, c.status || '-'))))),
           pager(rows.length, page, setCustPage, size))
       }
 
