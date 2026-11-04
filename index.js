@@ -2037,6 +2037,15 @@ for (const [idx, it] of (body.items || []).entries()) {
                 if (hit) fields['行业分类'] = `${hit.group} ${hit.groupName} / ${hit.code} ${hit.name}`
               }
               for (const k of Object.keys(fields)) if (!fields[k]) delete fields[k]
+              if (!fields['客户简介']) {
+                const parts = []
+                if (fields['成立时间']) { const m = fields['成立时间'].match(/^(\d{4})-(\d{2})-(\d{2})$/); if (m) parts.push(`成立于${m[1]}年${Number(m[2])}月${Number(m[3])}日`) }
+                if (fields['法定代表人']) parts.push(`法定代表人${fields['法定代表人']}`)
+                if (fields['注册资本']) parts.push(`注册资本${fields['注册资本']}`)
+                if (fields['地址']) parts.push(`注册地址位于${fields['地址']}`)
+                if (fields['行业分类']) parts.push(`所属行业为${String(fields['行业分类']).split('/').pop().trim()}`)
+                if (parts.length) fields['客户简介'] = `${name}，${parts.join('，')}。`
+              }
               return json(res, 200, { ok: true, fields, sources, answer: String(searched.answer || '').slice(0, 1200), note: '联网结果仅供核对，需人工确认后保存' })
             } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
           }

@@ -888,6 +888,15 @@ button.presales-badge{background:transparent;cursor:pointer}
               const hit = industryOptions.find((x) => industryRaw.includes(x.name) || x.name.includes(industryRaw))
               if (hit) fields['行业分类'] = `${hit.group} ${hit.groupName} / ${hit.code} ${hit.name}`
             }
+            if (!fields['客户简介']) {
+              const parts = []
+              if (fields['成立时间']) { const m = fields['成立时间'].match(/^(\d{4})-(\d{2})-(\d{2})$/); if (m) parts.push(`成立于${m[1]}年${Number(m[2])}月${Number(m[3])}日`) }
+              if (fields['法定代表人']) parts.push(`法定代表人${fields['法定代表人']}`)
+              if (fields['注册资本']) parts.push(`注册资本${fields['注册资本']}`)
+              if (fields['地址']) parts.push(`注册地址位于${fields['地址']}`)
+              if (fields['行业分类']) parts.push(`所属行业为${String(fields['行业分类']).split('/').pop().trim()}`)
+              if (parts.length) fields['客户简介'] = `${name}，${parts.join('，')}。`
+            }
           }
           setCustForm({ ...custForm, ...fields, '信息来源': '联网检索', '来源链接': (r.sources || []).map((x) => x.url).join('\n') })
           setLookupSources(r.sources || [])
@@ -896,9 +905,9 @@ button.presales-badge{background:transparent;cursor:pointer}
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setLookupBusy(false) }
       }
 
-      function customerField(key, label, type = 'text') {
+      function customerField(key, label, type = 'text', placeholder = '') {
         return h('label', null, h('span', { className: 'presales-label' }, label),
-          h('input', { className: 'presales-input', type, value: custForm?.[key] ?? '', onChange: (e) => setCustForm({ ...custForm, [key]: e.target.value }) }))
+          h('input', { className: 'presales-input', type, placeholder, value: custForm?.[key] ?? '', onChange: (e) => setCustForm({ ...custForm, [key]: e.target.value }) }))
       }
 
       function renderCustomerTab() {
@@ -915,7 +924,7 @@ button.presales-badge{background:transparent;cursor:pointer}
                   h('option', { value: '' }, '请选择行业分类'),
                   [...new Set(industryOptions.map((x) => `${x.group} ${x.groupName}`))].map((g) => h('optgroup', { key: g, label: g },
                     industryOptions.filter((x) => `${x.group} ${x.groupName}` === g).map((x) => h('option', { key: x.code, value: `${x.group} ${x.groupName} / ${x.code} ${x.name}` }, `${x.code} ${x.name}`)))))),
-              customerField('法定代表人', '法定代表人'), customerField('注册资本', '注册资本'), customerField('成立时间', '成立时间', 'date'), customerField('地址', '地址'),
+              customerField('法定代表人', '法定代表人'), customerField('注册资本', '注册资本'), customerField('成立时间', '成立时间', 'text', 'YYYY-MM-DD'), customerField('地址', '地址'),
               customerField('联系人', '联系人'), customerField('联系电话', '联系电话'), customerField('负责人', '负责人')),
             h('label', null, h('span', { className: 'presales-label' }, '客户简介'),
               h('textarea', { className: 'presales-input', style: { minHeight: 70 }, value: custForm['客户简介'] || '', onChange: (e) => setCustForm({ ...custForm, '客户简介': e.target.value }) })),
