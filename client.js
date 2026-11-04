@@ -18,10 +18,7 @@ window.__ModuleLoader__.load({
     const API = '/presales/api/'
     const HDR = { 'x-dsh-presales': '1' }
 
-    const FALLBACK_CUSTOMER_PROMPT = `你在帮用户新建客户。先用一句话问用户：「请告诉我客户的全称和所在省市，我来帮你查工商信息。」
-拿到后联网检索公开工商信息；查不到的字段留空，不编造；同名企业先列候选让用户选。
-用简单字段表展示：客户名称/省市/行业/法定代表人/注册资本/成立时间/地址/联系人/简介，并附来源。
-等用户明确确认后，调用 customer_create 写入，来源写进 信息来源/来源链接；成功后只回复客户编号和名称。`
+    const FALLBACK_CUSTOMER_PROMPT = `帮我新建一个客户。`
 
     const STYLE_MARK = 'dsh-presales/panel.css'
     const STYLE = `
