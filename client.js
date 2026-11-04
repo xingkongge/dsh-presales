@@ -872,11 +872,11 @@ button.presales-badge{background:transparent;cursor:pointer}
               '注册资本': pick(/注册资本[：:\s]*([0-9.,]+[万亿]?[元人民币]*)/),
               '成立时间': pick(/成立(?:日期|时间)[：:\s]*(\d{4}[-年]\d{1,2}[-月]\d{1,2}日?)/),
               '地址': pick(/(?:注册地址|地址)[：:\s]*为?([^\n，,。；;]{6,80})/),
-              '行业门类二级': pick(/所属行业(?:为)?([^，,。；;\n]{2,30})/),
             }
             for (const k of Object.keys(fields)) if (!fields[k]) delete fields[k]
-            if (fields['行业门类二级'] && !fields['行业分类']) {
-              const hit = industryOptions.find((x) => fields['行业门类二级'].includes(x.name) || x.name.includes(fields['行业门类二级']))
+            const industryRaw = pick(/所属行业(?:为)?([^，,。；;\n]{2,30})/)
+            if (industryRaw && !fields['行业分类']) {
+              const hit = industryOptions.find((x) => industryRaw.includes(x.name) || x.name.includes(industryRaw))
               if (hit) fields['行业分类'] = `${hit.group} ${hit.groupName} / ${hit.code} ${hit.name}`
             }
           }
