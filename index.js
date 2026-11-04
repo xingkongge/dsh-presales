@@ -316,7 +316,7 @@ export function apply(ctx, rawConfig = {}) {
     return {
       name: '商机名称', customerNo: '客户编号', customerName: '客户名称',
       amount: '商机金额万元', stage: '阶段', expected: '预计落单时间', intro: '简介',
-      source: '来源', industryL1: '行业门类（一级）', industryL2: '行业大类（二级）',
+      source: '来源',
       contact: '联系人', phone: '联系电话', sellerName: '销售姓名', ownerName: '售前姓名',
       winRate: '赢单率',
     }
@@ -360,7 +360,6 @@ export function apply(ctx, rawConfig = {}) {
       return [
         `## ${r['商机编号']} ${r['商机名称']}`,
         `客户：${r['客户名称'] || '-'} ｜ 阶段：${r['阶段']} ｜ 金额：${r['商机金额万元'] || 0} 万 ｜ 赢单率：${r['赢单率'] == null ? '-' : (Number(r['赢单率']) * 100).toFixed(0) + '%'}`,
-        `行业：${r['行业门类（一级）'] || '-'} / ${r['行业大类（二级）'] || '-'} ｜ 销售：${r['销售姓名'] || '-'} ｜ 售前：${r['售前姓名'] || '-'}`,
         `预计落单：${String(r['预计落单时间'] || '-').slice(0, 10)} ｜ 最后跟进：${String(r['最后跟进时间'] || '-').slice(0, 10)} ｜ 来源：${r['来源'] || '-'}`,
         r['简介'] ? `简介：${r['简介']}` : '',
         `跟进记录（${fs.length}）：`,
@@ -434,7 +433,7 @@ export function apply(ctx, rawConfig = {}) {
       const [id] = await create('opportunities', [{
         '商机编号': no, '商机名称': args.name, '客户编号': args.customerNo || '', '客户名称': args.customerName || '',
         '商机金额万元': Number(args.amount) || 0, '阶段': stage, '预计落单时间': args.expected || '',
-        '来源': args.source || '主动开发', '行业门类（一级）': args.industryL1 || '', '行业大类（二级）': args.industryL2 || '',
+        '来源': args.source || '主动开发',
         '联系人': args.contact || '', '联系电话': args.phone || '', '简介': args.intro || '',
         '销售姓名': args.sellerName || '', '售前姓名': args.ownerName || '', '赢单率': 0.1,
       }])
@@ -558,7 +557,6 @@ export function apply(ctx, rawConfig = {}) {
         ...by('阶段').map(([k, v]) => `- ${k}：${v.n} 个 / ${v.amt.toFixed(0)} 万`),
         '',
         '### 行业（一级）',
-        ...by('行业门类（一级）').slice(0, 8).map(([k, v]) => `- ${k}：${v.n} 个 / ${v.amt.toFixed(0)} 万`),
         '',
         '### 来源',
         ...by('来源').map(([k, v]) => `- ${k}：${v.n} 个`),
@@ -1792,7 +1790,7 @@ for (const [idx, it] of (body.items || []).entries()) {
               const [id] = await create('opportunities', [{
                 '商机编号': no, '商机名称': String(b.name).trim(), '客户编号': b.customerNo || '', '客户名称': b.customerName || '',
                 '商机金额万元': Number(b.amount) || 0, '阶段': stage, '预计落单时间': b.expected || '',
-                '来源': b.source || '主动开发', '行业门类（一级）': b.industryL1 || '', '行业大类（二级）': b.industryL2 || '',
+                '来源': b.source || '主动开发',
                 '联系人': b.contact || '', '联系电话': b.phone || '', '简介': b.intro || '',
                 '销售姓名': b.sellerName || '', '售前姓名': b.ownerName || '', '赢单率': 0.1,
               }])
@@ -1809,7 +1807,7 @@ for (const [idx, it] of (body.items || []).entries()) {
             rows.sort((a, b) => String(b['更新时间'] || '').localeCompare(String(a['更新时间'] || '')))
             return json(res, 200, { ok: true, items: rows.map((r) => ({
               id: r._id, no: r['商机编号'], name: r['商机名称'], customerName: r['客户名称'] || '',
-              stage: r['阶段'] || '', amount: Number(r['商机金额万元']) || 0, expected: String(r['预计落单时间'] || '').slice(0, 10),
+              stage: r['阶段'] || '', amount: Number(r['商机金额万元']) || 0, expected: normDate(r['预计落单时间']),
               owner: r['售前姓名'] || '', updated: String(r['更新时间'] || '').slice(0, 10), winRate: r['赢单率'] == null ? null : Number(r['赢单率']),
             })) })
           }
@@ -1832,14 +1830,14 @@ for (const [idx, it] of (body.items || []).entries()) {
             const docs = documents.filter((d) => d['商机编号'] === no).map((d) => ({ no: d['产物编号'], title: d['标题'], type: d['类型'], version: d['版本'], link: d['溯源'] || '', fileName: d['文件名'] || '' }))
             return json(res, 200, { ok: true, item: {
               id: r._id, no: r['商机编号'], name: r['商机名称'], customerNo: r['客户编号'] || '', customerName: r['客户名称'] || '',
-              stage: r['阶段'] || '', amount: Number(r['商机金额万元']) || 0, expected: String(r['预计落单时间'] || '').slice(0, 10),
-              source: r['来源'] || '', industryL1: r['行业门类（一级）'] || '', industryL2: r['行业大类（二级）'] || '',
+              stage: r['阶段'] || '', amount: Number(r['商机金额万元']) || 0, expected: normDate(r['预计落单时间']),
+              source: r['来源'] || '',
               contact: r['联系人'] || '', phone: r['联系电话'] || '', intro: r['简介'] || '',
               seller: r['销售姓名'] || '', owner: r['售前姓名'] || '', winRate: r['赢单率'] == null ? null : Number(r['赢单率']),
-              lastFollow: String(r['最后跟进时间'] || '').slice(0, 10),
+              lastFollow: normDate(r['最后跟进时间']),
             }, followups: followups.filter((f) => (f['商机'] || []).includes(r._id)).map((f) => ({
-              no: f['跟进编号'], date: String(f['跟进日期'] || '').slice(0, 10), person: f['跟进人'] || '', way: f['方式'] || '',
-              content: f['内容'] || '', next: f['下一步'] || '', nextDate: String(f['下次跟进'] || '').slice(0, 10),
+              no: f['跟进编号'], date: normDate(f['跟进日期']), person: f['跟进人'] || '', way: f['方式'] || '',
+              content: f['内容'] || '', next: f['下一步'] || '', nextDate: normDate(f['下次跟进']),
             })), changes: changes.filter((c) => (c['商机'] || []).includes(r._id)).map((c) => ({
               date: String(c['变更时间'] || '').slice(0, 10), by: c['变更人'] || '', field: c['字段'] || '', old: c['原值'] || '', val: c['新值'] || '', reason: c['原因'] || '',
             })), quotes: qs, documents: docs })
@@ -1858,7 +1856,7 @@ for (const [idx, it] of (body.items || []).entries()) {
             }
             const total = rows.length
             const won = rows.filter((r) => r['阶段'] === '赢单').length
-            return json(res, 200, { ok: true, total, amount: rows.reduce((s, r) => s + (Number(r['商机金额万元']) || 0), 0), won, stages: agg('阶段'), industries: agg('行业门类（一级）'), sources: agg('来源'), top: rows.slice().sort((a, b) => (Number(b['商机金额万元']) || 0) - (Number(a['商机金额万元']) || 0)).slice(0, 5).map((r) => ({ no: r['商机编号'], name: r['商机名称'], amount: Number(r['商机金额万元']) || 0, stage: r['阶段'] })) })
+            return json(res, 200, { ok: true, total, amount: rows.reduce((s, r) => s + (Number(r['商机金额万元']) || 0), 0), won, stages: agg('阶段'), sources: agg('来源'), top: rows.slice().sort((a, b) => (Number(b['商机金额万元']) || 0) - (Number(a['商机金额万元']) || 0)).slice(0, 5).map((r) => ({ no: r['商机编号'], name: r['商机名称'], amount: Number(r['商机金额万元']) || 0, stage: r['阶段'] })) })
           }
           if (route === 'opp_stage' && req.method === 'POST') {
             const body = await readBody(req)
