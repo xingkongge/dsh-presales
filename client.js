@@ -236,7 +236,7 @@ button.presales-badge{background:transparent;cursor:pointer}
     }
 
     function Panel() {
-      const [tab, setTab] = React.useState('opp')
+      const [tab, setTab] = React.useState('customer')
       const [status, setStatus] = React.useState(null)
       const [customers, setCustomers] = React.useState([])
       const [opps, setOpps] = React.useState([])
@@ -272,6 +272,9 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [rfqView, setRfqView] = React.useState(null)
       const [rfqPrices, setRfqPrices] = React.useState({})
       const [rfqEmail, setRfqEmail] = React.useState('')
+      const [custDetail, setCustDetail] = React.useState(null)
+      const [custForm, setCustForm] = React.useState(null)
+      const [custQuery, setCustQuery] = React.useState('')
       const [selected, setSelected] = React.useState({})
       const [mailQueue, setMailQueue] = React.useState([])
       const fileRef = React.useRef(null)
@@ -700,6 +703,76 @@ button.presales-badge{background:transparent;cursor:pointer}
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
 
+      async function openCustomer(key) {
+        try { setCustDetail(await api('customer_get?key=' + encodeURIComponent(key))) }
+        catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+      }
+
+      async function saveCustomer() {
+        if (!custForm || !String(custForm['客户名称'] || '').trim()) { setMsg({ kind: 'err', text: '客户名称必填' }); return }
+        try {
+          const r = await api('customer_save', { method: 'POST', body: JSON.stringify(custForm) })
+          setCustForm(null)
+          setMsg({ kind: 'ok', text: `客户已保存：${r.no || custForm['客户名称']}` })
+          await load()
+          if (r.no) await openCustomer(r.no)
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+      }
+
+      function customerField(key, label, type = 'text') {
+        return h('label', null, h('span', { className: 'presales-label' }, label),
+          h('input', { className: 'presales-input', type, value: custForm?.[key] ?? '', onChange: (e) => setCustForm({ ...custForm, [key]: e.target.value }) }))
+      }
+
+      function renderCustomerTab() {
+        if (custForm) {
+          return h('section', { className: 'presales-card' },
+            h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+              h('b', null, custForm.id ? '编辑客户' : '新建客户'),
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustForm(null) }, '取消')),
+            h('div', { className: 'presales-grid', style: { marginTop: 8 } },
+              customerField('客户名称', '客户名称'), customerField('省市', '省市'), customerField('行业门类一级', '行业门类一级'), customerField('行业门类二级', '行业门类二级'),
+              customerField('法定代表人', '法定代表人'), customerField('注册资本', '注册资本'), customerField('成立时间', '成立时间', 'date'), customerField('地址', '地址'),
+              customerField('联系人', '联系人'), customerField('联系电话', '联系电话'), customerField('负责人', '负责人')),
+            h('label', null, h('span', { className: 'presales-label' }, '客户简介'),
+              h('textarea', { className: 'presales-input', style: { minHeight: 70 }, value: custForm['客户简介'] || '', onChange: (e) => setCustForm({ ...custForm, '客户简介': e.target.value }) })),
+            h('div', { className: 'presales-row', style: { marginTop: 8 } },
+              h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void saveCustomer() }, '保存')))
+        }
+        if (custDetail) {
+          const c = custDetail.customer
+          return h('section', { className: 'presales-card' },
+            h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+              h('div', null, h('b', null, c['客户名称']), h('div', { className: 'presales-muted' }, `${c['客户编号'] || ''} · ${c['省市'] || ''} · ${c['行业'] || ''}`)),
+              h('div', { className: 'presales-row' },
+                h('button', { className: 'presales-btn', type: 'button', onClick: () => { setCustDetail(null); setCustForm({ ...c, id: c._id }) } }, '编辑'),
+                h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustDetail(null) }, '← 返回列表'))),
+            h('div', { className: 'presales-grid', style: { marginTop: 10 } },
+              h('div', null, h('div', { className: 'presales-label' }, '法定代表人'), c['法定代表人'] || '-'),
+              h('div', null, h('div', { className: 'presales-label' }, '注册资本'), c['注册资本'] || '-'),
+              h('div', null, h('div', { className: 'presales-label' }, '成立时间'), c['成立时间'] || '-'),
+              h('div', null, h('div', { className: 'presales-label' }, '负责人'), c['负责人'] || '-')),
+            h('div', { className: 'presales-muted', style: { marginTop: 8 } }, `地址：${c['地址'] || '-'} · 联系人：${c['联系人'] || '-'} ${c['联系电话'] || ''}`),
+            c['客户简介'] ? h('div', { style: { marginTop: 8 } }, c['客户简介']) : null,
+            h('div', { className: 'presales-label', style: { marginTop: 12 } }, `关联商机（${custDetail.opportunities.length}）`),
+            custDetail.opportunities.length ? h('ul', { className: 'presales-list' }, custDetail.opportunities.map((o) => h('li', { key: o._id },
+              h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+                h('span', null, h('b', null, o['商机编号']), ` ${o['商机名称']}`), h('span', null, `${o['阶段'] || ''} · ${o['金额'] || 0} 万`))))) : h('div', { className: 'presales-muted' }, '暂无关联商机'))
+        }
+        const q = custQuery.trim().toLowerCase()
+        const rows = customers.filter((c) => !q || `${c.name} ${c.code} ${c.industry}`.toLowerCase().includes(q))
+        return h('section', { className: 'presales-card' },
+          h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+            h('div', { className: 'presales-row' },
+              h('input', { className: 'presales-input', style: { maxWidth: 280 }, placeholder: '搜客户名称/编号/行业', value: custQuery, onChange: (e) => setCustQuery(e.target.value) }),
+              h('span', { className: 'presales-muted' }, `共 ${rows.length} 个客户`)),
+            h('button', { className: 'presales-btn primary', type: 'button', onClick: () => setCustForm({ '客户名称': '', '状态': '正常' }) }, '新建客户')),
+          h('table', { className: 'presales-table', style: { marginTop: 8 } },
+            h('thead', null, h('tr', null, ['客户名称', '编号', '省市', '行业', '负责人', '状态'].map((t) => h('th', { key: t }, t)))),
+            h('tbody', null, rows.map((c) => h('tr', { key: c.id, style: { cursor: 'pointer' }, onClick: () => void openCustomer(c.id) },
+              h('td', null, h('b', null, c.name)), h('td', null, c.code), h('td', null, c.region || '-'), h('td', null, c.industry || '-'), h('td', null, c.owner || '-'), h('td', null, c.status || '-'))))))
+      }
+
       function renderMailCard() {
         return (mailPreview ? h('section', { className: 'presales-card' },
           h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
@@ -774,10 +847,25 @@ button.presales-badge{background:transparent;cursor:pointer}
               status ? h('button', { className: `presales-badge ${status.ok ? 'ok' : 'err'}`, type: 'button', onClick: () => setShowCounts(!showCounts) }, status.ok ? 'WPS 已连接' : '未连接') : null,
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
           updatesOpen ? renderUpdateCard() : null,
           renderRfqTab(),
           renderMailCard())
+      }
+
+      if (tab === 'customer') {
+        return h('div', { className: 'presales-panel' },
+          h('header', { className: 'presales-head' },
+            h('div', null,
+              h('div', { className: 'presales-title' }, '数字售前'),
+              h('div', { className: 'presales-sub' }, '商机推进 · 报价出单 · 询价协同')),
+            h('div', { className: 'presales-row' },
+              status ? h('button', { className: `presales-badge ${status.ok ? 'ok' : 'err'}`, type: 'button', onClick: () => setShowCounts(!showCounts) }, status.ok ? 'WPS 已连接' : '未连接') : null,
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新'),
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
+          updatesOpen ? renderUpdateCard() : null,
+          renderCustomerTab())
       }
 
       if (tab === 'opp') {
@@ -796,7 +884,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void newOppChat() }, '新建商机（对话）'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新', updates && updates.some((u) => u.hasUpdate) ? h('span', { className: 'presales-dot' }) : null),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
           updatesOpen ? renderUpdateCard() : null,
           chatNotice ? h('div', { className: 'presales-msg ok' }, chatNotice) : null,
           h(OppTab, { onQuote: () => setTab('quote') }))
@@ -817,7 +905,7 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void newOppChat() }, '新建商机（对话）'),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新', updates && updates.some((u) => u.hasUpdate) ? h('span', { className: 'presales-dot' }) : null),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-        h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
+        h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
         updatesOpen ? renderUpdateCard() : null,
         h('section', { className: 'presales-card' },
           h('div', { className: 'presales-grid' },

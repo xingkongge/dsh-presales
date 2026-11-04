@@ -1863,6 +1863,53 @@ export function apply(ctx, rawConfig = {}) {
               return json(res, 400, { ok: false, error: String(e && e.message ? e.message : e) })
             }
           }
+          if (route === 'customer_get') {
+            try {
+              const key = String(url.searchParams.get('key') || '')
+              const rows = await list('customers')
+              const c = rows.find((x) => x._id === key || x['客户编号'] === key || x['客户名称'] === key)
+              if (!c) return json(res, 404, { ok: false, error: '客户不存在' })
+              const [opps, quotes] = await Promise.all([list('opportunities'), list('quotes')])
+              const relatedOpps = opps.filter((o) => o['客户编号'] === c['客户编号'] || o['客户名称'] === c['客户名称'])
+              const relatedQuotes = quotes.filter((q) => q['客户名称'] === c['客户名称'] || q['客户编号'] === c['客户编号'])
+              return json(res, 200, { ok: true, customer: c, opportunities: relatedOpps, quotes: relatedQuotes })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'customer_save' && req.method === 'POST') {
+            try {
+              const body = await readBody(req)
+              if (!String(body['客户名称'] || '').trim()) return json(res, 400, { ok: false, error: '客户名称必填' })
+              if (body.id) {
+                const patch = {}
+                for (const k of ['客户名称','省市','行业门类一级','行业门类二级','行业','法定代表人','注册资本','成立时间','地址','联系人','联系电话','客户简介','负责人','状态']) {
+                  if (body[k] !== undefined) patch[k] = body[k]
+                if (!patch['行业'] && body['行业门类二级']) patch['行业'] = body['行业门类二级']
+                }
+                await updateRecord('customers', body.id, patch)
+                return json(res, 200, { ok: true, id: body.id })
+              }
+              const rows = await list('customers')
+              const year = new Date().getFullYear()
+              let max = 0
+              for (const r of rows) {
+                const m = String(r['客户编号'] || '').match(/C-(\d{4})-(\d+)/)
+                if (m && Number(m[1]) === year) max = Math.max(max, Number(m[2]))
+              }
+              const no = `C-${year}-${String(max + 1).padStart(4, '0')}`
+              const row = {
+                '客户编号': no, '客户名称': String(body['客户名称']).trim(),
+                '省市': body['省市'] || '', '行业门类一级': body['行业门类一级'] || '', '行业门类二级': body['行业门类二级'] || '',
+                '行业': body['行业'] || body['行业门类二级'] || body['行业门类一级'] || '', '法定代表人': body['法定代表人'] || '', '注册资本': body['注册资本'] || '',
+                '成立时间': body['成立时间'] || '', '地址': body['地址'] || '', '联系人': body['联系人'] || '',
+                '联系电话': body['联系电话'] || '', '客户简介': body['客户简介'] || '', '负责人': body['负责人'] || '',
+                '创建人': body['创建人'] || '', '状态': body['状态'] || '正常',
+              }
+              const clean = {}
+              for (const [k, v] of Object.entries(row)) { if (v !== null && v !== undefined && v !== '') clean[k] = v }
+              const [id] = await create('customers', [clean])
+              return json(res, 200, { ok: true, id, no })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
           if (route === 'bootstrap') {
             const r = await ready()
             if (r.error) return json(res, 200, { ok: false, error: r.error })
@@ -1888,7 +1935,7 @@ export function apply(ctx, rawConfig = {}) {
               return json(res, 200, {
                 ok: true,
                 status: { ok: true, counts: { products: products.length, customers: customers.length, opportunities: opportunities.length, quotes: quotes.length, quoteTemplates: templates.length } },
-                customers: customers.map((c) => ({ id: c._id, code: c['客户编号'] || '', name: c['客户名称'] || '', industry: c['行业'] || '', level: c['客户等级'] || '' })),
+                customers: customers.map((c) => ({ id: c._id, code: c['客户编号'] || '', name: c['客户名称'] || '', region: c['省市'] || '', industry: c['行业'] || '', industry1: c['行业门类一级'] || '', industry2: c['行业门类二级'] || '', legal: c['法定代表人'] || '', capital: c['注册资本'] || '', founded: c['成立时间'] || '', address: c['地址'] || '', contact: c['联系人'] || '', phone: c['联系电话'] || '', intro: c['客户简介'] || '', owner: c['负责人'] || '', creator: c['创建人'] || '', createdAt: c['创建时间'] || '', status: c['状态'] || '' })),
                 templates: templates.filter((t) => t['启用状态'] === '启用').map((t) => ({ name: t['模板名称'], type: t['模板类型'], default: Boolean(t['默认模板']), fileId: t['文件ID'] || '' })),
                 quotes: quotes.slice(-10).reverse().map((q) => ({ quoteNo: q['报价单号'], customerName: q['客户名称'] || '', status: q['状态'] || '', grossTotal: Number(q['含税合计']) || 0, version: q['当前版本'] || '', link: q['文件链接'] || '' })),
                 categories: tree,
