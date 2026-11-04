@@ -897,13 +897,13 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
               h('div', null, h('b', null, c['客户名称']), h('div', { className: 'presales-muted' }, `${c['客户编号'] || ''} · ${c['省市'] || ''} · ${c['行业'] || ''}`)),
               h('div', { className: 'presales-row' },
-                h('button', { className: 'presales-btn', type: 'button', onClick: () => { setCustDetail(null); setCustForm({ ...c, id: c._id }) } }, '编辑'),
+                h('button', { className: 'presales-btn', type: 'button', onClick: () => { setCustDetail(null); setCustForm({ ...c, id: c._id, '负责人': fmtCell(c['负责人']) }) } }, '编辑'),
                 h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustDetail(null) }, '← 返回列表'))),
             h('div', { className: 'presales-grid', style: { marginTop: 10 } },
               h('div', null, h('div', { className: 'presales-label' }, '法定代表人'), c['法定代表人'] || '-'),
               h('div', null, h('div', { className: 'presales-label' }, '注册资本'), c['注册资本'] || '-'),
               h('div', null, h('div', { className: 'presales-label' }, '成立时间'), c['成立时间'] || '-'),
-              h('div', null, h('div', { className: 'presales-label' }, '负责人'), c['负责人'] || '-')),
+              h('div', null, h('div', { className: 'presales-label' }, '负责人'), fmtCell(c['负责人']) || '-')),
             h('div', { className: 'presales-muted', style: { marginTop: 8 } }, `地址：${c['地址'] || '-'} · 联系人：${c['联系人'] || '-'} ${c['联系电话'] || ''}`),
             c['客户简介'] ? h('div', { style: { marginTop: 8 } }, c['客户简介']) : null,
             h('div', { className: 'presales-label', style: { marginTop: 12 } }, `关联商机（${custDetail.opportunities.length}）`),
@@ -930,9 +930,13 @@ button.presales-badge{background:transparent;cursor:pointer}
           h('table', { className: 'presales-table', style: { marginTop: 8 } },
             h('thead', null, h('tr', null, ['客户名称', '编号', '省市', '行业', '负责人', '状态'].map((t) => h('th', { key: t }, t)))),
             h('tbody', null, view.map((c) => h('tr', { key: c.id, style: { cursor: 'pointer' }, onClick: () => void openCustomer(c.id) },
-              h('td', null, h('b', null, c.name)), h('td', null, c.code), h('td', null, c.region || '-'), h('td', null, c.industry || '-'), h('td', null, c.owner || '-'), h('td', null, c.status || '-'))))),
+              h('td', null, h('b', null, c.name)), h('td', null, c.code), h('td', null, c.region || '-'), h('td', null, c.industry || '-'), h('td', null, fmtCell(c.owner) || '-'), h('td', null, c.status || '-'))))),
           pager(rows.length, page, setCustPage, size))
       }
+
+      const fmtCell = (v) => Array.isArray(v)
+        ? v.map((x) => (x && typeof x === 'object' ? (x.name || x.label || x.id || '') : x)).join('、')
+        : (v && typeof v === 'object' ? (v.name || v.label || v.id || '') : (v ?? ''))
 
       function pager(total, page, setPage, size = 10) {
         const pages = Math.max(1, Math.ceil(total / size))
