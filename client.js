@@ -271,7 +271,7 @@ button.presales-badge{background:transparent;cursor:pointer}
 
       const sources = [...new Set(items.map((o) => o.source).filter(Boolean))]
       const filteredItems = items.filter((o) => !oppSource || o.source === oppSource)
-      const oppSize = 10
+      const oppSize = 20
       const oppCur = Math.min(oppPage, Math.max(1, Math.ceil(filteredItems.length / oppSize)))
       const oppView = filteredItems.slice((oppCur - 1) * oppSize, oppCur * oppSize)
       return h('div', null,
@@ -359,7 +359,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       const totals = computeTotals(cart)
       const quoteQ = quoteQuery.trim().toLowerCase()
       const quoteRows = quotes.filter((q) => (!quoteQ || `${q.quoteNo} ${q.customerName}`.toLowerCase().includes(quoteQ)) && (!quoteStatus || q.status === quoteStatus))
-      const quoteSize = 5
+      const quoteSize = 20
       const quoteCur = Math.min(quotePage, Math.max(1, Math.ceil(quoteRows.length / quoteSize)))
       const quoteView = quoteRows.slice((quoteCur - 1) * quoteSize, quoteCur * quoteSize)
 
@@ -914,14 +914,14 @@ button.presales-badge{background:transparent;cursor:pointer}
         const q = custQuery.trim().toLowerCase()
         const industries = [...new Set(customers.map((c) => c.industry).filter(Boolean))]
         const rows = customers.filter((c) => (!q || `${c.name} ${c.code} ${c.industry}`.toLowerCase().includes(q)) && (!custIndustry || c.industry === custIndustry))
-        const size = 10
+        const size = 20
         const page = Math.min(custPage, Math.max(1, Math.ceil(rows.length / size)))
         const view = rows.slice((page - 1) * size, page * size)
         return h('section', { className: 'presales-card' },
           h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
             h('div', { className: 'presales-row' },
-              h('input', { className: 'presales-input', style: { maxWidth: 260 }, placeholder: '搜客户名称/编号/行业', value: custQuery, onChange: (e) => { setCustQuery(e.target.value); setCustPage(1) } }),
-              h('select', { className: 'presales-select', style: { maxWidth: 130 }, value: custIndustry, onChange: (e) => { setCustIndustry(e.target.value); setCustPage(1) } },
+              h('input', { className: 'presales-input', style: { width: 240, flex: '0 0 240px' }, placeholder: '搜客户名称/编号/行业', value: custQuery, onChange: (e) => { setCustQuery(e.target.value); setCustPage(1) } }),
+              h('select', { className: 'presales-select', style: { width: 130, flex: '0 0 130px' }, value: custIndustry, onChange: (e) => { setCustIndustry(e.target.value); setCustPage(1) } },
                 h('option', { value: '' }, '全部行业'), industries.map((x) => h('option', { key: x, value: x }, x))),
               h('span', { className: 'presales-muted' }, `共 ${rows.length} 个客户`)),
             h('div', { className: 'presales-row' },
