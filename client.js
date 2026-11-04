@@ -63,7 +63,7 @@ button.presales-badge{background:transparent;cursor:pointer}
 .presales-tree-l2{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 6px 18px}
 .presales-tree-l2 button{background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:var(--dsw-alias-label-secondary)}
 .presales-tree-l2 button.active{border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-brand-primary)}
-.presales-input:focus,.presales-select:focus,.presales-table input:focus{outline:none;border-color:var(--dsw-alias-brand-primary,#2563eb) !important;box-shadow:0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary,#2563eb) 18%, transparent)}
+.presales-input:focus,.presales-select:focus,textarea.presales-input:focus,.presales-table input:focus{outline:none !important;border-color:#2563eb !important;box-shadow:0 0 0 3px rgba(37,99,235,.28) !important;transition:border-color .12s ease, box-shadow .12s ease}
 .presales-tabs{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--dsw-alias-border-l1);padding-bottom:8px}
 .presales-tab{padding:6px 14px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;font-size:13px}
 .presales-tab[aria-selected="true"]{background:var(--dsw-alias-bg-layer-1);border-color:var(--dsw-alias-border-l1);color:var(--dsw-alias-label-primary);font-weight:600}
