@@ -31,6 +31,7 @@ import {
 import { resolveTables } from './lib/tables.js'
 import { buildQuoteLayout } from './lib/xlsx-layout.js'
 import { PRESALES_SKILL, NEW_OPP_PROMPT, NEW_CUSTOMER_PROMPT } from './lib/skill.js'
+import { GB_INDUSTRIES } from './lib/industry.js'
 import { planSectionWrites } from './lib/section-render.js'
 import { buildRfqMail } from './lib/rfq-mail.js'
 import * as XLSX from 'xlsx'
@@ -1981,6 +1982,9 @@ for (const [idx, it] of (body.items || []).entries()) {
               return json(res, 400, { ok: false, error: String(e && e.message ? e.message : e) })
             }
           }
+          if (route === 'industry_options') {
+            return json(res, 200, { ok: true, items: GB_INDUSTRIES })
+          }
           if (route === 'customer_get') {
             try {
               const key = String(url.searchParams.get('key') || '')
@@ -2020,6 +2024,10 @@ for (const [idx, it] of (body.items || []).entries()) {
                 '地址': pick(/(?:注册地址|地址)[：:\s]*为?([^\n，,。；;]{6,80})/),
                 '行业门类二级': pick(/所属行业(?:为)?([^，,。；;\n]{2,30})/),
               }
+              if (fields['行业门类二级']) {
+                const hit = GB_INDUSTRIES.find((x) => fields['行业门类二级'].includes(x.name) || x.name.includes(fields['行业门类二级']))
+                if (hit) fields['行业分类'] = `${hit.group} ${hit.groupName} / ${hit.code} ${hit.name}`
+              }
               for (const k of Object.keys(fields)) if (!fields[k]) delete fields[k]
               return json(res, 200, { ok: true, fields, sources, answer: String(searched.answer || '').slice(0, 1200), note: '联网结果仅供核对，需人工确认后保存' })
             } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
@@ -2030,7 +2038,7 @@ for (const [idx, it] of (body.items || []).entries()) {
               if (!String(body['客户名称'] || '').trim()) return json(res, 400, { ok: false, error: '客户名称必填' })
               if (body.id) {
                 const patch = {}
-                for (const k of ['客户名称','省市','行业门类一级','行业门类二级','行业','法定代表人','注册资本','成立时间','地址','联系人','联系电话','客户简介','负责人','状态']) {
+                for (const k of ['客户名称','省市','行业分类','行业门类一级','行业门类二级','行业','法定代表人','注册资本','成立时间','地址','联系人','联系电话','客户简介','负责人','状态']) {
                   if (body[k] !== undefined) patch[k] = body[k]
                 if (!patch['行业'] && body['行业门类二级']) patch['行业'] = body['行业门类二级']
                 }
@@ -2048,7 +2056,7 @@ for (const [idx, it] of (body.items || []).entries()) {
               const row = {
                 '客户编号': no, '客户名称': String(body['客户名称']).trim(),
                 '省市': body['省市'] || '', '行业门类一级': body['行业门类一级'] || '', '行业门类二级': body['行业门类二级'] || '',
-                '行业': body['行业'] || body['行业门类二级'] || body['行业门类一级'] || '', '法定代表人': body['法定代表人'] || '', '注册资本': body['注册资本'] || '',
+                '行业分类': body['行业分类'] || '', '行业': body['行业'] || body['行业门类二级'] || body['行业门类一级'] || '', '法定代表人': body['法定代表人'] || '', '注册资本': body['注册资本'] || '',
                 '成立时间': body['成立时间'] || '', '地址': body['地址'] || '', '联系人': body['联系人'] || '',
                 '联系电话': body['联系电话'] || '', '客户简介': body['客户简介'] || '', '负责人': body['负责人'] || '',
                 '创建人': body['创建人'] || '', '状态': body['状态'] || '正常',
@@ -2084,7 +2092,7 @@ for (const [idx, it] of (body.items || []).entries()) {
               return json(res, 200, {
                 ok: true,
                 status: { ok: true, counts: { products: products.length, customers: customers.length, opportunities: opportunities.length, quotes: quotes.length, quoteTemplates: templates.length } },
-                customers: customers.map((c) => ({ id: c._id, code: c['客户编号'] || '', name: c['客户名称'] || '', region: c['省市'] || '', industry: c['行业'] || '', industry1: c['行业门类一级'] || '', industry2: c['行业门类二级'] || '', legal: c['法定代表人'] || '', capital: c['注册资本'] || '', founded: c['成立时间'] || '', address: c['地址'] || '', contact: c['联系人'] || '', phone: c['联系电话'] || '', intro: c['客户简介'] || '', owner: Array.isArray(c['负责人']) ? c['负责人'].map((x) => (x && typeof x === 'object' ? (x.name || x.id || '') : x)).join('、') : (c['负责人'] || ''), creator: c['创建人'] || '', createdAt: c['创建时间'] || '', status: c['状态'] || '' })),
+                customers: customers.map((c) => ({ id: c._id, code: c['客户编号'] || '', name: c['客户名称'] || '', region: c['省市'] || '', industry: c['行业'] || '', industry1: c['行业门类一级'] || '', industry2: c['行业门类二级'] || '', industryCategory: c['行业分类'] || '', legal: c['法定代表人'] || '', capital: c['注册资本'] || '', founded: c['成立时间'] || '', address: c['地址'] || '', contact: c['联系人'] || '', phone: c['联系电话'] || '', intro: c['客户简介'] || '', owner: Array.isArray(c['负责人']) ? c['负责人'].map((x) => (x && typeof x === 'object' ? (x.name || x.id || '') : x)).join('、') : (c['负责人'] || ''), creator: c['创建人'] || '', createdAt: c['创建时间'] || '', status: c['状态'] || '' })),
                 templates: templates.filter((t) => t['启用状态'] === '启用').map((t) => ({ name: t['模板名称'], type: t['模板类型'], default: Boolean(t['默认模板']), fileId: t['文件ID'] || '' })),
                 quotes: quotes.slice(-10).reverse().map((q) => ({ quoteNo: q['报价单号'], customerName: q['客户名称'] || '', status: q['状态'] || '', grossTotal: Number(q['含税合计']) || 0, version: q['当前版本'] || '', link: q['文件链接'] || '' })),
                 categories: tree,

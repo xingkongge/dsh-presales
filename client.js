@@ -346,6 +346,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [quotePage, setQuotePage] = React.useState(1)
       const [lookupBusy, setLookupBusy] = React.useState(false)
       const [lookupSources, setLookupSources] = React.useState([])
+      const [industryOptions, setIndustryOptions] = React.useState([])
       const [selected, setSelected] = React.useState({})
       const [mailQueue, setMailQueue] = React.useState([])
       const fileRef = React.useRef(null)
@@ -384,6 +385,7 @@ button.presales-badge{background:transparent;cursor:pointer}
           setCats(b.categories || [])
           const def = (b.templates || []).find((x) => x.default) || (b.templates || [])[0]
           if (def) setTemplate(def.name)
+          api('industry_options').then((r) => setIndustryOptions(r.items || [])).catch(() => {})
           api('skill_prompt').then((sp) => { if (sp?.prompt) setOppPrompt(sp.prompt) }).catch(() => {})
           // 模板文件检查很慢，放后台，不阻塞首屏
           api('template_check').then((tc) => setTplNotice(tc && (tc.added?.length || tc.updates?.length || tc.missing?.length) ? tc : null)).catch(() => {})
@@ -873,6 +875,10 @@ button.presales-badge{background:transparent;cursor:pointer}
               '行业门类二级': pick(/所属行业(?:为)?([^，,。；;\n]{2,30})/),
             }
             for (const k of Object.keys(fields)) if (!fields[k]) delete fields[k]
+            if (fields['行业门类二级'] && !fields['行业分类']) {
+              const hit = industryOptions.find((x) => fields['行业门类二级'].includes(x.name) || x.name.includes(fields['行业门类二级']))
+              if (hit) fields['行业分类'] = `${hit.group} ${hit.groupName} / ${hit.code} ${hit.name}`
+            }
           }
           setCustForm({ ...custForm, ...fields, '信息来源': '联网检索', '来源链接': (r.sources || []).map((x) => x.url).join('\n') })
           setLookupSources(r.sources || [])
@@ -895,7 +901,11 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('div', { className: 'presales-grid', style: { marginTop: 8 } },
               h('label', null, h('span', { className: 'presales-label' }, h('span', null, '客户名称 '), h('button', { className: 'presales-btn', type: 'button', style: { padding: '2px 8px', fontSize: 12 }, disabled: lookupBusy, onClick: () => void lookupCustomer() }, lookupBusy ? '查询中…' : '联网查询')),
                 h('input', { className: 'presales-input', value: custForm?.['客户名称'] ?? '', onChange: (e) => setCustForm({ ...custForm, '客户名称': e.target.value }) })),
-              customerField('省市', '省市'), customerField('行业门类一级', '行业门类一级'), customerField('行业门类二级', '行业门类二级'),
+              customerField('省市', '省市'), h('label', null, h('span', { className: 'presales-label' }, '行业分类'),
+                h('select', { className: 'presales-select', value: custForm?.['行业分类'] || '', onChange: (e) => setCustForm({ ...custForm, '行业分类': e.target.value }) },
+                  h('option', { value: '' }, '请选择行业分类'),
+                  [...new Set(industryOptions.map((x) => `${x.group} ${x.groupName}`))].map((g) => h('optgroup', { key: g, label: g },
+                    industryOptions.filter((x) => `${x.group} ${x.groupName}` === g).map((x) => h('option', { key: x.code, value: `${x.group} ${x.groupName} / ${x.code} ${x.name}` }, `${x.code} ${x.name}`)))))),
               customerField('法定代表人', '法定代表人'), customerField('注册资本', '注册资本'), customerField('成立时间', '成立时间', 'date'), customerField('地址', '地址'),
               customerField('联系人', '联系人'), customerField('联系电话', '联系电话'), customerField('负责人', '负责人')),
             h('label', null, h('span', { className: 'presales-label' }, '客户简介'),
@@ -909,7 +919,7 @@ button.presales-badge{background:transparent;cursor:pointer}
           const c = custDetail.customer
           return h('section', { className: 'presales-card' },
             h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
-              h('div', null, h('b', null, c['客户名称']), h('div', { className: 'presales-muted' }, `${c['客户编号'] || ''} · ${c['省市'] || ''} · ${c['行业'] || ''}`)),
+              h('div', null, h('b', null, c['客户名称']), h('div', { className: 'presales-muted' }, `${c['客户编号'] || ''} · ${c['省市'] || ''} · ${c['行业分类'] || c['行业'] || ''}`)),
               h('div', { className: 'presales-row' },
                 h('button', { className: 'presales-btn', type: 'button', onClick: () => { setCustDetail(null); setCustForm({ ...c, id: c._id, '负责人': fmtCell(c['负责人']) }) } }, '编辑'),
                 h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustDetail(null) }, '← 返回列表'))),
@@ -926,8 +936,8 @@ button.presales-badge{background:transparent;cursor:pointer}
                 h('span', null, h('b', null, o['商机编号']), ` ${o['商机名称']}`), h('span', null, `${o['阶段'] || ''} · ${o['金额'] || 0} 万`))))) : h('div', { className: 'presales-muted' }, '暂无关联商机'))
         }
         const q = custQuery.trim().toLowerCase()
-        const industries = [...new Set(customers.map((c) => c.industry).filter(Boolean))]
-        const rows = customers.filter((c) => (!q || `${c.name} ${c.code} ${c.industry}`.toLowerCase().includes(q)) && (!custIndustry || c.industry === custIndustry))
+        const industries = [...new Set(customers.map((c) => c.industryCategory || c.industry).filter(Boolean))]
+        const rows = customers.filter((c) => (!q || `${c.name} ${c.code} ${c.industryCategory || c.industry}`.toLowerCase().includes(q)) && (!custIndustry || (c.industryCategory || c.industry) === custIndustry))
         const size = 20
         const page = Math.min(custPage, Math.max(1, Math.ceil(rows.length / size)))
         const view = rows.slice((page - 1) * size, page * size)
@@ -944,7 +954,7 @@ button.presales-badge{background:transparent;cursor:pointer}
           h('table', { className: 'presales-table', style: { marginTop: 8 } },
             h('thead', null, h('tr', null, ['客户名称', '编号', '省市', '行业', '负责人', '状态'].map((t) => h('th', { key: t }, t)))),
             h('tbody', null, view.map((c) => h('tr', { key: c.id, style: { cursor: 'pointer' }, onClick: () => void openCustomer(c.id) },
-              h('td', null, h('b', null, c.name)), h('td', null, c.code), h('td', null, c.region || '-'), h('td', null, c.industry || '-'), h('td', null, fmtCell(c.owner) || '-'), h('td', null, c.status || '-'))))),
+              h('td', null, h('b', null, c.name)), h('td', null, c.code), h('td', null, c.region || '-'), h('td', null, (c.industryCategory || c.industry || '-').split('/').pop().trim()), h('td', null, fmtCell(c.owner) || '-'), h('td', null, c.status || '-'))))),
           pager(rows.length, page, setCustPage, size))
       }
 
