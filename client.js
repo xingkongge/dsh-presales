@@ -357,6 +357,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [custQuery, setCustQuery] = React.useState('')
       const [custIndustry, setCustIndustry] = React.useState('')
       const [custPage, setCustPage] = React.useState(1)
+      const [currentUser, setCurrentUser] = React.useState(null)
       const [quoteQuery, setQuoteQuery] = React.useState('')
       const [quoteStatus, setQuoteStatus] = React.useState('')
       const [quotePage, setQuotePage] = React.useState(1)
@@ -395,6 +396,7 @@ button.presales-badge{background:transparent;cursor:pointer}
           const b = await api('bootstrap')
           if (!b.ok) throw new Error(b.error || 'WPS 数据加载失败')
           setStatus(b.status)
+          if (b.currentUser) setCurrentUser(b.currentUser)
           setCustomers(b.customers || [])
           setTemplates(b.templates || [])
           setQuotes(b.quotes || [])
@@ -986,7 +988,7 @@ button.presales-badge{background:transparent;cursor:pointer}
                 h('option', { value: '' }, '全部行业'), industries.map((x) => h('option', { key: x, value: x }, x))),
               h('span', { className: 'presales-muted' }, `共 ${rows.length} 个客户`)),
             h('div', { className: 'presales-row' },
-              h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustForm({ '客户名称': '', '状态': '正常' }) }, '新建客户'),
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustForm({ '客户名称': '', '状态': '正常', '创建人': currentUser?.name || '' }) }, '新建客户'),
               h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void newCustomerChat() }, '新建客户（对话）'))),
           h('table', { className: 'presales-table', style: { marginTop: 8 } },
             h('thead', null, h('tr', null, ['客户名称', '编号', '省市', '行业', '创建人', '状态'].map((t) => h('th', { key: t }, t)))),

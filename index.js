@@ -130,6 +130,19 @@ export function apply(ctx, rawConfig = {}) {
     return r.cli
   }
 
+  let meCache = { at: 0, data: null }
+  async function currentUser() {
+    if (meCache.data && Date.now() - meCache.at < 5 * 60 * 1000) return meCache.data
+    try {
+      const cli = await cliOk()
+      const r = await runCli(cli, ['user', 'me', '-o', 'json'])
+      const d = r.json?.data || {}
+      const data = { id: d.id || '', name: d.user_name || '' }
+      if (data.name) meCache = { at: Date.now(), data }
+      return data
+    } catch { return { id: '', name: '' } }
+  }
+
   async function create(alias, rows) {
     if (config.write === false) throw new Error('写操作已禁用（config.write=false）')
     const t = tables[alias]
@@ -397,11 +410,12 @@ export function apply(ctx, rawConfig = {}) {
     output: TEXT_OUTPUT,
     async execute(args = {}) {
       const no = await nextCustomerNo()
+      const me = await currentUser()
       const row = {
         '客户编号': no, '客户名称': args.name, '省市': args.region || '',
         '行业分类': args.industryCategory || args.industry || '', '法定代表人': args.legal || '',
         '注册资本': args.capital || '', '成立时间': args.founded || '', '地址': args.address || '',
-        '客户简介': args.intro || '', '创建人': args.creator || '', '状态': '正常',
+        '客户简介': args.intro || '', '创建人': args.creator || me.name || '', '状态': '正常',
         '信息来源': args.source || '', '来源链接': args.sourceUrl || '',
       }
       const clean = {}
@@ -1978,6 +1992,9 @@ for (const [idx, it] of (body.items || []).entries()) {
               return json(res, 400, { ok: false, error: String(e && e.message ? e.message : e) })
             }
           }
+          if (route === 'current_user') {
+            return json(res, 200, { ok: true, ...(await currentUser()) })
+          }
           if (route === 'industry_options') {
             return json(res, 200, { ok: true, items: GB_INDUSTRIES })
           }
@@ -2080,7 +2097,7 @@ for (const [idx, it] of (body.items || []).entries()) {
                 '客户编号': no, '客户名称': String(body['客户名称']).trim(),
                 '省市': body['省市'] || '',
                 '行业分类': body['行业分类'] || '', '法定代表人': body['法定代表人'] || '', '注册资本': body['注册资本'] || '',
-                '成立时间': body['成立时间'] || '', '地址': body['地址'] || '', '客户简介': body['客户简介'] || '', '创建人': body['创建人'] || '',
+                '成立时间': body['成立时间'] || '', '地址': body['地址'] || '', '客户简介': body['客户简介'] || '', '创建人': body['创建人'] || (await currentUser()).name || '',
                 '创建人': body['创建人'] || '', '状态': body['状态'] || '正常',
               }
               const clean = {}
@@ -2118,6 +2135,7 @@ for (const [idx, it] of (body.items || []).entries()) {
                 templates: templates.filter((t) => t['启用状态'] === '启用').map((t) => ({ name: t['模板名称'], type: t['模板类型'], default: Boolean(t['默认模板']), fileId: t['文件ID'] || '' })),
                 quotes: quotes.slice(-10).reverse().map((q) => ({ quoteNo: q['报价单号'], customerName: q['客户名称'] || '', status: q['状态'] || '', grossTotal: Number(q['含税合计']) || 0, version: q['当前版本'] || '', link: q['文件链接'] || '' })),
                 categories: tree,
+                currentUser: await currentUser(),
               })
             } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
           }
