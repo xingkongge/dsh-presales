@@ -42,7 +42,7 @@ window.__ModuleLoader__.load({
 .presales-table th{ text-align:left;color:var(--dsw-alias-label-secondary);font-weight:500;font-size:12px;padding:6px 8px;border-bottom:1px solid var(--dsw-alias-border-l1)}
 .presales-table td{padding:6px 8px;border-bottom:1px solid var(--dsw-alias-border-l1);vertical-align:middle}
 .presales-table input{width:72px;padding:4px 6px;border-radius:6px;border:1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 32%, transparent);background:var(--dsw-alias-bg-layer-1);color:inherit;font-size:13px}
-.presales-results{list-style:none;margin:8px 0 0;padding:0;max-height:220px;overflow:auto}
+.presales-results{list-style:none;margin:8px 0 0;padding:0;max-height:420px;overflow:auto}
 .presales-results li{display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer}
 .presales-results li:hover{background:var(--dsw-alias-bg-layer-2)}
 .presales-muted{color:var(--dsw-alias-label-secondary);font-size:12px}
@@ -1157,9 +1157,9 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => fileRef.current && fileRef.current.click() }, '选择本地模板（一次性）'),
             localTpl ? h('span', { className: 'presales-muted' }, `已选：${localTpl.name}`) : h('span', { className: 'presales-muted' }, '自定义 xlsx 仅本次使用，不写入 WPS'),
             localTpl ? h('button', { className: 'presales-btn', type: 'button', onClick: () => setLocalTpl(null) }, '清除') : null),
-        h('section', { className: 'presales-card' },
-
-          h('div', { className: 'presales-row', style: { justifyContent: 'space-between', marginTop: 10 } },
+        h('div', { className: 'presales-row', style: { alignItems: 'stretch', flexWrap: 'nowrap', gap: 12 } },
+        h('section', { className: 'presales-card', style: { width: 300, flex: '0 0 300px' } },
+          h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
             h('b', null, '产品分类'),
             cat.l1 ? h('button', { className: 'presales-btn', type: 'button', onClick: () => pickCat('', '') }, '全部') : h('span', { className: 'presales-muted' }, '点击分类筛选，或直接搜关键字')),
           h('div', { className: 'presales-tree' },
@@ -1180,7 +1180,7 @@ button.presales-badge{background:transparent;cursor:pointer}
                   onClick: () => pickCat(one.name, two.name),
                 }, `${two.name} (${two.count})`))) : null))),
           !cats.length ? h('div', { className: 'presales-muted' }, '分类加载中…') : null),
-        h('section', { className: 'presales-card' },
+        h('section', { className: 'presales-card', style: { flex: '1 1 auto', minWidth: 0, minHeight: 360 } },
           h('div', { className: 'presales-row' },
             h('input', {
               className: 'presales-input', style: { maxWidth: 360 }, placeholder: '搜产品名称/编码，如：安全、XYZL-SW',
@@ -1191,7 +1191,7 @@ button.presales-badge{background:transparent;cursor:pointer}
             key: p.code, onClick: () => add(p),
           }, h('span', null, h('b', null, p.name), h('span', { className: 'presales-muted' }, ` ${p.code} · ${p.unit} · 未税 ${money(p.stdPrice)}`)),
             h('span', { className: 'presales-btn' }, '加入')))) : null,
-          h('div', { className: 'presales-muted', style: { marginTop: 8 } }, '点击结果加入明细；数量/折扣可在下表修改')),
+          h('div', { className: 'presales-muted', style: { marginTop: 8 } }, '点击结果加入明细；数量/折扣可在下表修改'))),
         h('section', { className: 'presales-card' },
           h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
             h('b', null, '报价分节'),
