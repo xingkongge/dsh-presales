@@ -964,6 +964,15 @@ button.presales-badge{background:transparent;cursor:pointer}
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setLookupBusy(false) }
       }
 
+      async function deleteCustomer(c) {
+        if (!window.confirm(`确定删除客户「${c.name}」？该操作会直接删除 WPS 记录。`)) return
+        try {
+          await api('customer_delete', { method: 'POST', body: JSON.stringify({ id: c.id }) })
+          setMsg({ kind: 'ok', text: `已删除客户：${c.name}` })
+          await load()
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+      }
+
       function customerField(key, label, type = 'text', placeholder = '') {
         return h('label', null, h('span', { className: 'presales-label' }, label),
           h('input', { className: 'presales-input', type, placeholder, value: custForm?.[key] ?? '', onChange: (e) => setCustForm({ ...custForm, [key]: e.target.value }) }))
@@ -1028,10 +1037,25 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('div', { className: 'presales-row' },
               h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustForm({ '客户名称': '', '状态': '正常', '创建人': currentUser?.name || '' }) }, '新建客户'),
               h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void newCustomerChat() }, '新建客户（对话）'))),
-          h('table', { className: 'presales-table', style: { marginTop: 8 } },
-            h('thead', null, h('tr', null, ['客户名称', '编号', '省市', '行业', '创建人', '状态'].map((t) => h('th', { key: t }, t)))),
-            h('tbody', null, view.map((c) => h('tr', { key: c.id, style: { cursor: 'pointer' }, onClick: () => void openCustomer(c.id) },
-              h('td', null, h('b', null, c.name)), h('td', null, c.code), h('td', null, c.region || '-'), h('td', null, (c.industryCategory || '-').split('/').pop().trim()), h('td', null, fmtCell(c.creator) || '-'), h('td', null, c.status || '-'))))),
+          h('table', { className: 'presales-table', style: { marginTop: 8, minWidth: 1500 } },
+            h('thead', null, h('tr', null, ['客户名称', '省市', '法定代表人', '注册资本', '成立时间', '地址', '商机数', '行业门类（一级）', '行业大类（二级）', '创建时间', '创建人', '操作'].map((t) => h('th', { key: t }, t)))),
+            h('tbody', null, view.map((c) => {
+              const cat = String(c.industryCategory || '')
+              const seg = cat.split('/')
+              const l1 = (seg[0] || '').replace(/^[A-T]\s*/, '').trim()
+              const l2 = (seg[1] || '').replace(/^\d{2}\s*/, '').trim()
+              return h('tr', { key: c.id, style: { cursor: 'pointer' }, onClick: () => void openCustomer(c.id) },
+                h('td', null, h('b', null, c.name), c.code ? h('div', { className: 'presales-muted' }, c.code) : null),
+                h('td', null, c.region || '-'), h('td', null, c.legal || '-'), h('td', null, c.capital || '-'),
+                h('td', null, normDate(c.founded) || '-'),
+                h('td', { title: c.address || '', style: { maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, c.address || '-'),
+                h('td', null, c.oppCount ?? 0), h('td', null, l1 || '-'), h('td', null, l2 || '-'),
+                h('td', null, normDate(c.createdAt) || '-'), h('td', null, fmtCell(c.creator) || '-'),
+                h('td', null, h('div', { className: 'presales-row', style: { flexWrap: 'nowrap' }, onClick: (e) => e.stopPropagation() },
+                  h('button', { className: 'presales-btn', type: 'button', onClick: () => void openCustomer(c.id) }, '详情'),
+                  h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustForm({ ...c, id: c.id, '创建人': fmtCell(c.creator) }) }, '编辑'),
+                  h('button', { className: 'presales-btn', type: 'button', onClick: () => void deleteCustomer(c) }, '删除'))))
+            }))),
           pager(rows.length, page, setCustPage, size))
       }
 

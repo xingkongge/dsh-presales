@@ -162,6 +162,14 @@ export function apply(ctx, rawConfig = {}) {
     return true
   }
 
+  async function deleteRecord(alias, id) {
+    const t = tables[alias]
+    const cli = await cliOk()
+    const res = await runCli(cli, ['dbsheet', 'record', 'delete', t.fileId, String(t.sheetId), '--records', String(id), '-o', 'json'])
+    if (!res.ok) throw new Error(`${t.label} 删除失败：${res.stderr || res.stdout}`)
+    return true
+  }
+
   async function registerDocument({ quoteNo, version, customerName, opportunityNo, opportunityName, fileName, link }) {
     if (!link) return null
     const [id] = await create('documents', [{
@@ -2073,6 +2081,14 @@ for (const [idx, it] of (body.items || []).entries()) {
               return json(res, 200, { ok: true, fields, sources, answer: String(searched.answer || '').slice(0, 1200), note: '联网结果仅供核对，需人工确认后保存' })
             } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
           }
+          if (route === 'customer_delete' && req.method === 'POST') {
+            try {
+              const body = await readBody(req)
+              if (!body.id) return json(res, 400, { ok: false, error: '缺少客户 id' })
+              await deleteRecord('customers', body.id)
+              return json(res, 200, { ok: true })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
           if (route === 'customer_save' && req.method === 'POST') {
             try {
               const body = await readBody(req)
@@ -2131,7 +2147,14 @@ for (const [idx, it] of (body.items || []).entries()) {
               return json(res, 200, {
                 ok: true,
                 status: { ok: true, counts: { products: products.length, customers: customers.length, opportunities: opportunities.length, quotes: quotes.length, quoteTemplates: templates.length } },
-                customers: customers.map((c) => ({ id: c._id, code: c['客户编号'] || '', name: c['客户名称'] || '', region: c['省市'] || '', industryCategory: c['行业分类'] || '', legal: c['法定代表人'] || '', capital: c['注册资本'] || '', founded: c['成立时间'] || '', address: c['地址'] || '', intro: c['客户简介'] || '', creator: c['创建人'] || '', createdAt: c['创建时间'] || '', status: c['状态'] || '' })),
+                customers: customers.map((c) => {
+                  const oppCount = opportunities.filter((o) => {
+                    const sameName = !!o['客户名称'] && o['客户名称'] === c['客户名称']
+                    const sameCode = o['客户编号'] === c['客户编号'] && (!o['客户名称'] || o['客户名称'] === c['客户名称'])
+                    return sameName || sameCode
+                  }).length
+                  return { id: c._id, code: c['客户编号'] || '', name: c['客户名称'] || '', region: c['省市'] || '', industryCategory: c['行业分类'] || '', legal: c['法定代表人'] || '', capital: c['注册资本'] || '', founded: normDate(c['成立时间']), address: c['地址'] || '', intro: c['客户简介'] || '', creator: c['创建人'] || '', createdAt: normDate(c['创建时间']), oppCount, status: c['状态'] || '' }
+                }),
                 templates: templates.filter((t) => t['启用状态'] === '启用').map((t) => ({ name: t['模板名称'], type: t['模板类型'], default: Boolean(t['默认模板']), fileId: t['文件ID'] || '' })),
                 quotes: quotes.slice().sort((a, b) => String(b['更新时间'] || b['创建时间'] || '').localeCompare(String(a['更新时间'] || a['创建时间'] || ''))).map((q) => {
                   const o = opportunities.find((x) => x['商机编号'] === q['商机编号'])
