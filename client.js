@@ -89,10 +89,11 @@ button.presales-badge{background:transparent;cursor:pointer}
 .presales-tab{padding:6px 16px;border-radius:9px;border:1px solid transparent;font-weight:500;transition:background .12s ease,color .12s ease,box-shadow .12s ease}
 .presales-tab:hover{background:color-mix(in srgb, var(--dsw-alias-label-primary) 6%, transparent);color:var(--dsw-alias-label-primary)}
 .presales-tab[aria-selected="true"]{background:var(--dsw-alias-bg-layer-1);border-color:color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);color:#2563eb;font-weight:650;box-shadow:0 1px 3px rgba(15,23,42,.10)}
-.presales-table th{background:color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent);font-weight:600;letter-spacing:.2px}
+.presales-table th{white-space:nowrap;background:color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent);font-weight:600;letter-spacing:.2px}
 .presales-table thead th:first-child{border-top-left-radius:8px}
 .presales-table thead th:last-child{border-top-right-radius:8px}
 .presales-table tbody tr{transition:background .1s ease}
+.presales-table td .presales-btn{padding:4px 9px;white-space:nowrap}
 .presales-table tbody tr:hover{background:color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent)}
 .presales-badge{padding:3px 9px;border:1px solid color-mix(in srgb, currentColor 35%, transparent);background:color-mix(in srgb, currentColor 10%, transparent);letter-spacing:.2px}
 .presales-badge.ok{background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 10%, transparent)}
@@ -1037,7 +1038,8 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('div', { className: 'presales-row' },
               h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustForm({ '客户名称': '', '状态': '正常', '创建人': currentUser?.name || '' }) }, '新建客户'),
               h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void newCustomerChat() }, '新建客户（对话）'))),
-          h('table', { className: 'presales-table', style: { marginTop: 8, minWidth: 1500 } },
+          h('div', { style: { overflowX: 'auto', marginTop: 8 } },
+          h('table', { className: 'presales-table', style: { minWidth: 1320 } },
             h('thead', null, h('tr', null, ['客户名称', '省市', '法定代表人', '注册资本', '成立时间', '地址', '商机数', '行业门类（一级）', '行业大类（二级）', '创建时间', '创建人', '操作'].map((t) => h('th', { key: t }, t)))),
             h('tbody', null, view.map((c) => {
               const cat = String(c.industryCategory || '')
@@ -1055,7 +1057,7 @@ button.presales-badge{background:transparent;cursor:pointer}
                   h('button', { className: 'presales-btn', type: 'button', onClick: () => void openCustomer(c.id) }, '详情'),
                   h('button', { className: 'presales-btn', type: 'button', onClick: () => setCustForm({ ...c, id: c.id, '创建人': fmtCell(c.creator) }) }, '编辑'),
                   h('button', { className: 'presales-btn', type: 'button', onClick: () => void deleteCustomer(c) }, '删除'))))
-            }))),
+            })))),
           pager(rows.length, page, setCustPage, size))
       }
 
