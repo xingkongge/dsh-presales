@@ -395,6 +395,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [quoteQuery, setQuoteQuery] = React.useState('')
       const [quoteStatus, setQuoteStatus] = React.useState('')
       const [quotePage, setQuotePage] = React.useState(1)
+      const [quoteMode, setQuoteMode] = React.useState('list')
       const [lookupBusy, setLookupBusy] = React.useState(false)
       const [lookupSources, setLookupSources] = React.useState([])
       const [industryOptions, setIndustryOptions] = React.useState(GB_INDUSTRIES_FALLBACK)
@@ -673,7 +674,7 @@ button.presales-badge{background:transparent;cursor:pointer}
         if (!cart.length) { setMsg({ kind: 'err', text: '请先添加产品' }); return }
         setBusy(true); setMsg(null)
         try {
-          const useRevision = baseQuote && opp
+          const useRevision = !!baseQuote
           const r = useRevision
             ? await api('quote_revise', { method: 'POST', body: JSON.stringify({ quoteNo: baseQuote.quoteNo, items: cartItemsPayload(), note: '' }) })
             : await api('save', {
@@ -1099,6 +1100,57 @@ button.presales-badge{background:transparent;cursor:pointer}
           rows.length ? h('ul', { className: 'presales-list', style: { marginTop: 8 } }, rows) : h('div', { className: 'presales-muted', style: { marginTop: 8 } }, '还没有询价单；勾选临时产品后点“生成询价单”'))
       }
 
+      function applyQuoteLines(lines) {
+        setCart((lines || []).map((l, i) => ({
+          uid: `q-${Date.now()}-${i}`, code: l.code, name: l.name, spec: l.spec || '', brand: l.brand || '', model: l.model || '',
+          unit: l.unit || '', stdPrice: Number(l.stdPrice) || 0, taxRate: Number(l.taxRate) || 0.13,
+          qty: Number(l.qty) || 1, discount: Number(l.discount) || 1, section: l.section || section,
+          category: l.category || '', remark: l.remark || '', temp: String(l.lineType || '').includes('临时'),
+        })))
+      }
+
+      async function editQuote(q) {
+        const c = customers.find((x) => x.name === q.customerName)
+        if (c) setCustomerId(c.id)
+        if (q.template) setTemplate(q.template)
+        setQuoteMode('edit'); setMsg({ kind: 'ok', text: `已载入 ${q.quoteNo} ${q.version}，保存生成下一版` })
+        try {
+          const r = await api('quote_latest?quoteNo=' + encodeURIComponent(q.quoteNo))
+          if (r.quote) { applyQuoteLines(r.quote.lines); setBaseQuote({ quoteNo: r.quote.quoteNo, version: r.quote.currentVersion }) }
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+      }
+
+      function statusClass(st) {
+        if (st === '有效' || st === '已提交' || st === '赢单') return 'ok'
+        if (st === '作废' || st === '已驳回') return 'err'
+        return 'warn'
+      }
+
+      function renderQuoteLedger() {
+        return h('section', { className: 'presales-card' },
+          h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+            h('div', { className: 'presales-row' },
+              h('input', { className: 'presales-input', style: { width: 220, flex: '0 0 220px' }, placeholder: '搜单号/商机/客户', value: quoteQuery, onChange: (e) => { setQuoteQuery(e.target.value); setQuotePage(1) } }),
+              h('select', { className: 'presales-select', style: { width: 120, flex: '0 0 120px' }, value: quoteStatus, onChange: (e) => { setQuoteStatus(e.target.value); setQuotePage(1) } },
+                h('option', { value: '' }, '全部状态'),
+                [...new Set(quotes.map((q) => q.status).filter(Boolean))].map((st) => h('option', { key: st, value: st }, st))),
+              h('span', { className: 'presales-muted' }, `共 ${quoteRows.length} 张报价单`)),
+            h('button', { className: 'presales-btn primary', type: 'button', onClick: () => { setCart([]); setBaseQuote(null); setQuoteMode('edit'); setMsg(null) } }, '＋ 新建报价')),
+          h('table', { className: 'presales-table', style: { marginTop: 8 } },
+            h('thead', null, h('tr', null, ['商机名称', '客户名称', '销售', '售前', '报价金额', '利润率', '报价时间', '版本', '状态', '操作'].map((t) => h('th', { key: t }, t)))),
+            h('tbody', null, quoteView.map((q) => h('tr', { key: q.quoteNo },
+              h('td', null, h('b', null, q.opportunityName || '-'), h('div', { className: 'presales-muted' }, q.quoteNo)),
+              h('td', null, q.customerName || '-'), h('td', null, q.seller || '-'), h('td', null, q.owner || '-'),
+              h('td', null, money(q.grossTotal)), h('td', null, q.margin == null ? '-' : `${(q.margin * 100).toFixed(0)}%`),
+              h('td', null, normDate(q.updated) || '-'), h('td', null, q.version || '-'),
+              h('td', null, h('span', { className: `presales-badge ${statusClass(q.status)}` }, q.status || '草稿')),
+              h('td', null, h('div', { className: 'presales-row', style: { flexWrap: 'nowrap' } },
+                h('button', { className: 'presales-btn', type: 'button', onClick: () => q.link && window.open(q.link, '_blank') }, '详情'),
+                h('button', { className: 'presales-btn', type: 'button', onClick: () => void editQuote(q) }, '编辑'))))))),
+          !quoteView.length ? h('div', { className: 'presales-muted', style: { padding: 12 } }, '还没有报价单，点右上角「新建报价」开始') : null,
+          pager(quoteRows.length, quoteCur, setQuotePage, quoteSize))
+      }
+
       if (tab === 'rfq') {
         return h('div', { className: 'presales-panel' },
           h('header', { className: 'presales-head' },
@@ -1151,6 +1203,21 @@ button.presales-badge{background:transparent;cursor:pointer}
           h(OppTab, { onQuote: () => setTab('quote'), onNewOpp: () => void newOppChat() }))
       }
 
+      if (tab === 'quote' && quoteMode === 'list') {
+        return h('div', { className: 'presales-panel' },
+          h('header', { className: 'presales-head' },
+            h('div', null,
+              h('div', { className: 'presales-title' }, '数字售前'),
+              h('div', { className: 'presales-sub' }, '商机推进 · 报价出单 · 询价协同')),
+            h('div', { className: 'presales-row' },
+              status ? h('button', { className: `presales-badge ${status.ok ? 'ok' : 'err'}`, type: 'button', onClick: () => setShowCounts(!showCounts) }, status.ok ? 'WPS 已连接' : '未连接') : null,
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新'),
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
+          updatesOpen ? renderUpdateCard() : null,
+          renderQuoteLedger())
+      }
+
       return h('div', { className: 'presales-panel' },
         h('header', { className: 'presales-head' }, 
           h('div', null,
@@ -1167,6 +1234,8 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
         h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
         updatesOpen ? renderUpdateCard() : null,
+        h('div', { className: 'presales-row', style: { marginBottom: 8 } },
+          h('button', { className: 'presales-btn', type: 'button', onClick: () => { setQuoteMode('list'); setMsg(null) } }, '← 返回报价台账')),
         h('section', { className: 'presales-card' },
           h('div', { className: 'presales-grid' },
             h('label', null, h('span', { className: 'presales-label' }, '客户'), h('select', {

@@ -2133,7 +2133,15 @@ for (const [idx, it] of (body.items || []).entries()) {
                 status: { ok: true, counts: { products: products.length, customers: customers.length, opportunities: opportunities.length, quotes: quotes.length, quoteTemplates: templates.length } },
                 customers: customers.map((c) => ({ id: c._id, code: c['客户编号'] || '', name: c['客户名称'] || '', region: c['省市'] || '', industryCategory: c['行业分类'] || '', legal: c['法定代表人'] || '', capital: c['注册资本'] || '', founded: c['成立时间'] || '', address: c['地址'] || '', intro: c['客户简介'] || '', creator: c['创建人'] || '', createdAt: c['创建时间'] || '', status: c['状态'] || '' })),
                 templates: templates.filter((t) => t['启用状态'] === '启用').map((t) => ({ name: t['模板名称'], type: t['模板类型'], default: Boolean(t['默认模板']), fileId: t['文件ID'] || '' })),
-                quotes: quotes.slice(-10).reverse().map((q) => ({ quoteNo: q['报价单号'], customerName: q['客户名称'] || '', status: q['状态'] || '', grossTotal: Number(q['含税合计']) || 0, version: q['当前版本'] || '', link: q['文件链接'] || '' })),
+                quotes: quotes.slice().sort((a, b) => String(b['更新时间'] || b['创建时间'] || '').localeCompare(String(a['更新时间'] || a['创建时间'] || ''))).map((q) => {
+                  const o = opportunities.find((x) => x['商机编号'] === q['商机编号'])
+                  return {
+                    quoteNo: q['报价单号'], opportunityNo: q['商机编号'] || '', opportunityName: q['商机名称'] || o?.['商机名称'] || '',
+                    customerName: q['客户名称'] || '', seller: o?.['销售姓名'] || '', owner: o?.['售前姓名'] || '',
+                    status: q['状态'] || '', grossTotal: Number(q['含税合计']) || 0, margin: q['毛利率'] == null ? null : Number(q['毛利率']),
+                    version: q['当前版本'] || '', updated: normDate(q['更新时间'] || q['创建时间']), link: q['文件链接'] || '', template: q['模板'] || '',
+                  }
+                }),
                 categories: tree,
                 currentUser: await currentUser(),
               })
@@ -2220,10 +2228,11 @@ for (const [idx, it] of (body.items || []).entries()) {
           }
           if (route === 'quote_latest') {
             try {
+              const quoteNo = String(url.searchParams.get('quoteNo') || '')
               const oppNo = String(url.searchParams.get('opportunityNo') || '')
               const customerName = String(url.searchParams.get('customerName') || '')
               const quotes = await list('quotes')
-              const q = quotes.filter((x) => (oppNo && x['商机编号'] === oppNo) || (!oppNo && customerName && x['客户名称'] === customerName)).slice(-1)[0]
+              const q = quoteNo ? quotes.find((x) => x['报价单号'] === quoteNo) : quotes.filter((x) => (oppNo && x['商机编号'] === oppNo) || (!oppNo && customerName && x['客户名称'] === customerName)).slice(-1)[0]
               if (!q) return json(res, 200, { ok: true, quote: null })
               const dto = await loadQuoteDto(q['报价单号'])
               return json(res, 200, { ok: true, quote: { quoteNo: q['报价单号'], currentVersion: q['当前版本'] || 'V1', template: q['模板'] || '', lines: dto.lines } })
