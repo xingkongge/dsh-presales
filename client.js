@@ -73,6 +73,40 @@ button.presales-badge{background:transparent;cursor:pointer}
 .presales-list{list-style:none;margin:0;padding:0}
 .presales-list li{padding:8px 0;border-bottom:1px dashed var(--dsw-alias-border-l1);font-size:13px}
 .presales-quotes li{padding:7px 0;border-bottom:1px dashed var(--dsw-alias-border-l1);font-size:13px;display:flex;justify-content:space-between;gap:10px}
+
+/* ── 视觉层：卡片 / 标签页 / 次级按钮 ─────────────────── */
+.presales-head{padding-bottom:6px;border-bottom:1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent)}
+.presales-title{letter-spacing:.2px}
+.presales-card{border-color:color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);border-radius:12px;box-shadow:0 1px 2px rgba(15,23,42,.04), 0 10px 28px -22px rgba(15,23,42,.35);transition:box-shadow .15s ease,border-color .15s ease}
+.presales-card:hover{border-color:color-mix(in srgb, var(--dsw-alias-label-primary) 18%, transparent);box-shadow:0 1px 2px rgba(15,23,42,.05), 0 14px 32px -22px rgba(15,23,42,.45)}
+.presales-btn{background:linear-gradient(180deg, color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent), color-mix(in srgb, var(--dsw-alias-label-primary) 2%, transparent)) !important;border:1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 16%, transparent) !important;border-radius:8px;padding:6px 13px;font-weight:500;box-shadow:0 1px 1px rgba(15,23,42,.04);transition:transform .1s ease, box-shadow .12s ease, background .12s ease, border-color .12s ease}
+.presales-btn:hover{background:color-mix(in srgb, var(--dsw-alias-label-primary) 9%, transparent) !important;border-color:color-mix(in srgb, var(--dsw-alias-label-primary) 28%, transparent) !important;box-shadow:0 3px 8px -2px rgba(15,23,42,.12);transform:translateY(-1px)}
+.presales-btn:active{transform:translateY(0);box-shadow:none}
+.presales-btn:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+.presales-btn.primary{background:linear-gradient(180deg,#3b82f6,#2563eb) !important;border:1px solid #1d4ed8 !important;color:#fff !important;box-shadow:0 2px 6px -1px rgba(37,99,235,.45), inset 0 1px 0 rgba(255,255,255,.18)}
+.presales-btn.primary:hover{background:linear-gradient(180deg,#2563eb,#1d4ed8) !important;box-shadow:0 6px 14px -4px rgba(37,99,235,.55)}
+.presales-tabs{display:flex;gap:4px;padding:4px;margin-bottom:16px;background:color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent);border:1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 10%, transparent);border-radius:12px;width:fit-content;max-width:100%}
+.presales-tab{padding:6px 16px;border-radius:9px;border:1px solid transparent;font-weight:500;transition:background .12s ease,color .12s ease,box-shadow .12s ease}
+.presales-tab:hover{background:color-mix(in srgb, var(--dsw-alias-label-primary) 6%, transparent);color:var(--dsw-alias-label-primary)}
+.presales-tab[aria-selected="true"]{background:var(--dsw-alias-bg-layer-1);border-color:color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);color:#2563eb;font-weight:650;box-shadow:0 1px 3px rgba(15,23,42,.10)}
+.presales-table th{background:color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent);font-weight:600;letter-spacing:.2px}
+.presales-table thead th:first-child{border-top-left-radius:8px}
+.presales-table thead th:last-child{border-top-right-radius:8px}
+.presales-table tbody tr{transition:background .1s ease}
+.presales-table tbody tr:hover{background:color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent)}
+.presales-badge{padding:3px 9px;border:1px solid color-mix(in srgb, currentColor 35%, transparent);background:color-mix(in srgb, currentColor 10%, transparent);letter-spacing:.2px}
+.presales-badge.ok{background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 10%, transparent)}
+.presales-badge.err{background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent)}
+.presales-msg{border-width:1px;border-style:solid;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.presales-msg.ok{background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 9%, transparent);border-color:color-mix(in srgb, var(--dsw-alias-state-success-primary) 30%, transparent)}
+.presales-msg.err{background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 9%, transparent);border-color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent)}
+.presales-results li{border-bottom:1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 7%, transparent);transition:background .1s ease}
+.presales-results li:last-child{border-bottom:0}
+.presales-tree-l1{padding:6px 8px;border-radius:8px;transition:background .1s ease}
+.presales-tree-l1:hover{background:color-mix(in srgb, var(--dsw-alias-label-primary) 6%, transparent)}
+.presales-tree-l1.active{background:color-mix(in srgb, #2563eb 10%, transparent)}
+.presales-tree-l2 button{transition:background .1s ease,border-color .1s ease;background:color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent)}
+.presales-tree-l2 button:hover{border-color:color-mix(in srgb, #2563eb 45%, transparent)}
 `
     const money = (n) => Number(n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     const round = (n, d = 2) => { const f = 10 ** d; return Math.round((Number(n) + Number.EPSILON) * f) / f }
