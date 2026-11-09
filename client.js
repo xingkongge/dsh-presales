@@ -443,6 +443,11 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [quoteStatus, setQuoteStatus] = React.useState('')
       const [quotePage, setQuotePage] = React.useState(1)
       const [quoteMode, setQuoteMode] = React.useState('list')
+      const [devList, setDevList] = React.useState([])
+      const [devForm, setDevForm] = React.useState(null)
+      const [devOpps, setDevOpps] = React.useState([])
+      const [devQuery, setDevQuery] = React.useState('')
+      const [devPage, setDevPage] = React.useState(1)
       const [lookupBusy, setLookupBusy] = React.useState(false)
       const [lookupSources, setLookupSources] = React.useState([])
       const [industryOptions, setIndustryOptions] = React.useState(GB_INDUSTRIES_FALLBACK)
@@ -492,7 +497,7 @@ button.presales-badge{background:transparent;cursor:pointer}
         } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
       }
       React.useEffect(() => { void load(); void checkUpdates() }, [])
-      React.useEffect(() => { if (tab === 'rfq') void loadRfqs() }, [tab])
+      React.useEffect(() => { if (tab === 'rfq') void loadRfqs(); if (tab === 'dev') void loadDevs() }, [tab])
       React.useEffect(() => {
         api('email_accounts').then((r) => {
           let list = Array.isArray(r.accounts) ? r.accounts.map((a) => (typeof a === 'string' ? { name: a, email: '', label: a } : a)) : []
@@ -1215,6 +1220,114 @@ button.presales-badge{background:transparent;cursor:pointer}
         return 'warn'
       }
 
+      async function loadDevs() {
+        try {
+          const [r, o] = await Promise.all([api('dev_list'), api('opps')])
+          setDevList(r.items || []); setDevOpps(o.items || [])
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+      }
+
+      const blankWork = () => ({ module: '', content: '', reqDays: 0, devDays: 0, testDays: 0 })
+
+      async function saveDev() {
+        if (!devForm) return
+        try {
+          const body = { id: devForm.id || '', opportunityNo: devForm.opportunityNo || '', opportunityName: devForm.opportunityName || '', customerName: devForm.customerName || '', stage: devForm.stage || '', presale: devForm.presale || '', owner: devForm.owner || '', summary: devForm.summary || '', works: devForm.works || [] }
+          const r = await api('dev_save', { method: 'POST', body: JSON.stringify(body) })
+          setDevForm(null); await loadDevs()
+          setMsg({ kind: 'ok', text: `已保存评估 ${r.no} ${'V' + r.version}` })
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+      }
+
+      async function deleteDev(it) {
+        if (!window.confirm(`确定删除评估 ${it.no}？`)) return
+        try { await api('dev_delete', { method: 'POST', body: JSON.stringify({ id: it.id }) }); await loadDevs(); setMsg({ kind: 'ok', text: `已删除 ${it.no}` }) }
+        catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) }
+      }
+
+      function devSetWork(i, key, val) {
+        const works = (devForm.works || []).slice()
+        works[i] = { ...works[i], [key]: key.endsWith('Days') ? Number(val) || 0 : val }
+        setDevForm({ ...devForm, works })
+      }
+
+      function renderDevEditor() {
+        const works = devForm.works || []
+        const sum = (k) => works.reduce((a, w) => a + (Number(w[k]) || 0), 0)
+        const total = sum('reqDays') + sum('devDays') + sum('testDays')
+        return h('div', null,
+          h('div', { className: 'presales-row', style: { marginBottom: 8 } },
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => setDevForm(null) }, '← 返回评估列表')),
+          h('section', { className: 'presales-card' },
+            h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+              h('b', null, devForm.no ? `评估信息 ${devForm.no}` : '新建定开评估'),
+              h('span', { className: 'presales-muted' }, devForm.id ? `当前 V${devForm.version}，保存后升级` : '保存后生成 V1')),
+            h('div', { className: 'presales-grid', style: { marginTop: 8 } },
+              h('label', null, h('span', { className: 'presales-label' }, '商机'),
+                h('select', { className: 'presales-select', value: devForm.opportunityNo || '', onChange: (e) => {
+                  const o = devOpps.find((x) => x.no === e.target.value) || {}
+                  setDevForm({ ...devForm, opportunityNo: o.no || '', opportunityName: o.name || '', customerName: o.customerName || '', stage: o.stage || '', presale: o.owner || '' })
+                } }, h('option', { value: '' }, '请选择商机'), devOpps.map((o) => h('option', { key: o.no, value: o.no }, `${o.no} ${o.name}`)))),
+              h('label', null, h('span', { className: 'presales-label' }, '商机编号'), h('input', { className: 'presales-input', value: devForm.opportunityNo || '', readOnly: true })),
+              h('label', null, h('span', { className: 'presales-label' }, '商机阶段'), h('input', { className: 'presales-input', value: devForm.stage || '', readOnly: true })),
+              h('label', null, h('span', { className: 'presales-label' }, '评估负责人'), h('input', { className: 'presales-input', value: devForm.owner || '', onChange: (e) => setDevForm({ ...devForm, owner: e.target.value }) })),
+              h('label', null, h('span', { className: 'presales-label' }, '售前'), h('input', { className: 'presales-input', value: devForm.presale || '', onChange: (e) => setDevForm({ ...devForm, presale: e.target.value }) })),
+              h('label', null, h('span', { className: 'presales-label' }, '版本'), h('input', { className: 'presales-input', value: devForm.id ? `V${devForm.version}` : 'V1', readOnly: true }))),
+            h('label', null, h('span', { className: 'presales-label' }, '评估结果摘要'),
+              h('textarea', { className: 'presales-input', style: { minHeight: 64, marginTop: 8 }, value: devForm.summary || '', onChange: (e) => setDevForm({ ...devForm, summary: e.target.value }) }))),
+          h('section', { className: 'presales-card' },
+            h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+              h('b', null, '定制开发工作量测算（人天可调整，总计/占比自动计算）'),
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => setDevForm({ ...devForm, works: works.concat([blankWork()]) }) }, '＋ 添加工作类')),
+            h('div', { style: { overflowX: 'auto' } },
+              h('table', { className: 'presales-table', style: { minWidth: 980, marginTop: 8 } },
+                h('thead', null, h('tr', null, ['序号', '模块/工作类', '开发主要内容', '需求/详设人天', '开发人天', '测试人天', '总计', '商机占比', '商机定开人天', '操作'].map((t) => h('th', { key: t }, t)))),
+                h('tbody', null, works.map((w, i) => {
+                  const t = (Number(w.reqDays) || 0) + (Number(w.devDays) || 0) + (Number(w.testDays) || 0)
+                  return h('tr', { key: i },
+                    h('td', null, i + 1),
+                    h('td', null, h('input', { className: 'presales-input', style: { width: 130 }, value: w.module || '', onChange: (e) => devSetWork(i, 'module', e.target.value) })),
+                    h('td', null, h('input', { className: 'presales-input', style: { width: 260 }, value: w.content || '', onChange: (e) => devSetWork(i, 'content', e.target.value) })),
+                    h('td', null, h('input', { className: 'presales-input', style: { width: 64 }, type: 'number', value: w.reqDays ?? 0, onChange: (e) => devSetWork(i, 'reqDays', e.target.value) })),
+                    h('td', null, h('input', { className: 'presales-input', style: { width: 64 }, type: 'number', value: w.devDays ?? 0, onChange: (e) => devSetWork(i, 'devDays', e.target.value) })),
+                    h('td', null, h('input', { className: 'presales-input', style: { width: 64 }, type: 'number', value: w.testDays ?? 0, onChange: (e) => devSetWork(i, 'testDays', e.target.value) })),
+                    h('td', null, t), h('td', null, '100'), h('td', null, t),
+                    h('td', null, h('button', { className: 'presales-btn', type: 'button', onClick: () => setDevForm({ ...devForm, works: works.filter((_, j) => j !== i) }) }, '删除')))
+                }))),
+              h('div', { className: 'presales-muted', style: { marginTop: 8 } }, `需求/详设 ${sum('reqDays')} 人天 + 开发 ${sum('devDays')} 人天 + 测试 ${sum('testDays')} 人天，合计 ${total} 人天`)),
+            h('div', { className: 'presales-row', style: { marginTop: 10, justifyContent: 'flex-end' } },
+              h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void saveDev() }, '保存'),
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => setDevForm(null) }, '取消'))))
+      }
+
+      function renderDevList() {
+        const q = devQuery.trim().toLowerCase()
+        const rows = devList.filter((x) => !q || `${x.no} ${x.opportunityName} ${x.customerName}`.toLowerCase().includes(q))
+        const size = 20
+        const cur = Math.min(devPage, Math.max(1, Math.ceil(rows.length / size)))
+        const view = rows.slice((cur - 1) * size, cur * size)
+        return h('section', { className: 'presales-card' },
+          h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+            h('div', { className: 'presales-row' },
+              h('input', { className: 'presales-input', style: { width: 240, flex: '0 0 240px' }, placeholder: '搜评估编号/商机/客户', value: devQuery, onChange: (e) => { setDevQuery(e.target.value); setDevPage(1) } }),
+              h('span', { className: 'presales-muted' }, `共 ${rows.length} 条`)),
+            h('button', { className: 'presales-btn primary', type: 'button', onClick: () => setDevForm({ works: [blankWork()] }) }, '＋ 新建评估')),
+          h('div', { style: { overflowX: 'auto' } },
+            h('table', { className: 'presales-table', style: { minWidth: 1100, marginTop: 8 } },
+              h('thead', null, h('tr', null, ['评估编号', '商机名称', '版本', '售前', '定制开发评估详情', '评估负责人', '操作'].map((t) => h('th', { key: t }, t)))),
+              h('tbody', null, view.map((it) => h('tr', { key: it.id },
+                h('td', null, it.no), h('td', null, h('b', null, it.opportunityName || '-'), it.customerName ? h('div', { className: 'presales-muted' }, it.customerName) : null),
+                h('td', null, h('span', { className: 'presales-badge' }, `V${it.version}`)), h('td', null, it.presale || '-'),
+                h('td', { style: { maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, title: it.summary || '' }, it.summary || '-'),
+                h('td', null, it.owner || '-'),
+                h('td', null, h('div', { className: 'presales-row', style: { flexWrap: 'nowrap' } },
+                  h('button', { className: 'presales-btn', type: 'button', onClick: () => setDevForm({ ...it, works: it.works || [] }) }, '详情'),
+                  h('button', { className: 'presales-btn', type: 'button', onClick: () => setDevForm({ ...it, works: it.works || [] }) }, '编辑'),
+                  h('button', { className: 'presales-btn', type: 'button', onClick: () => void deleteDev(it) }, '删除')))))))),
+          !view.length ? h('div', { className: 'presales-muted', style: { padding: 12 } }, '还没有定开评估，点「新建评估」开始') : null,
+          pager(rows.length, cur, setDevPage, size))
+      }
+
       function renderQuoteLedger() {
         return h('section', { className: 'presales-card' },
           h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
@@ -1250,7 +1363,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               status ? h('button', { className: `presales-badge ${status.ok ? 'ok' : 'err'}`, type: 'button', onClick: () => setShowCounts(!showCounts) }, status.ok ? 'WPS 已连接' : '未连接') : null,
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估')),
           updatesOpen ? renderUpdateCard() : null,
           renderRfqTab(),
           renderMailCard())
@@ -1266,7 +1379,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               status ? h('button', { className: `presales-badge ${status.ok ? 'ok' : 'err'}`, type: 'button', onClick: () => setShowCounts(!showCounts) }, status.ok ? 'WPS 已连接' : '未连接') : null,
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估')),
           updatesOpen ? renderUpdateCard() : null,
           renderCustomerTab())
       }
@@ -1286,10 +1399,24 @@ button.presales-badge{background:transparent;cursor:pointer}
               showCounts && status ? h('span', { className: 'presales-muted' }, `产品 ${status.counts?.products ?? '-'} · 客户 ${status.counts?.customers ?? '-'} · 报价 ${status.counts?.quotes ?? '-'}`) : null,
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新', updates && updates.some((u) => u.hasUpdate) ? h('span', { className: 'presales-dot' }) : null),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估')),
           updatesOpen ? renderUpdateCard() : null,
           chatNotice ? h('div', { className: 'presales-msg ok' }, chatNotice) : null,
           h(OppTab, { onQuote: () => setTab('quote'), onNewOpp: () => void newOppChat() }))
+      }
+
+      if (tab === 'dev') {
+        return h('div', { className: 'presales-panel' },
+          h('header', { className: 'presales-head' },
+            h('div', null,
+              h('div', { className: 'presales-title' }, '数字售前'),
+              h('div', { className: 'presales-sub' }, '商机推进 · 报价出单 · 询价协同')),
+            h('div', { className: 'presales-row' },
+              status ? h('button', { className: `presales-badge ${status.ok ? 'ok' : 'err'}`, type: 'button' }, status.ok ? 'WPS 已连接' : '未连接') : null,
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => void loadDevs() }, '刷新'))),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估')),
+          devForm ? renderDevEditor() : renderDevList(),
+          msg ? h('div', { className: `presales-msg ${msg.kind === 'ok' ? 'ok' : 'err'}` }, msg.text) : null)
       }
 
       if (tab === 'quote' && quoteMode === 'list') {
@@ -1302,7 +1429,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               status ? h('button', { className: `presales-badge ${status.ok ? 'ok' : 'err'}`, type: 'button', onClick: () => setShowCounts(!showCounts) }, status.ok ? 'WPS 已连接' : '未连接') : null,
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估')),
           updatesOpen ? renderUpdateCard() : null,
           renderQuoteLedger())
       }
@@ -1321,7 +1448,7 @@ button.presales-badge{background:transparent;cursor:pointer}
             showCounts && status ? h('span', { className: 'presales-muted' }, `产品 ${status.counts?.products ?? '-'} · 客户 ${status.counts?.customers ?? '-'} · 报价 ${status.counts?.quotes ?? '-'}`) : null,
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新', updates && updates.some((u) => u.hasUpdate) ? h('span', { className: 'presales-dot' }) : null),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-        h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单')),
+        h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估')),
         updatesOpen ? renderUpdateCard() : null,
         h('div', { className: 'presales-row', style: { marginBottom: 8 } },
           h('button', { className: 'presales-btn', type: 'button', onClick: () => { setQuoteMode('list'); setMsg(null) } }, '← 返回报价台账')),

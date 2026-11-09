@@ -2027,6 +2027,48 @@ for (const [idx, it] of (body.items || []).entries()) {
           if (route === 'industry_options') {
             return json(res, 200, { ok: true, items: GB_INDUSTRIES })
           }
+          if (route === 'dev_list') {
+            try {
+              const rows = await list('devEvals')
+              const items = rows.map((r) => ({ id: r._id, no: r['评估编号'], opportunityNo: r['商机编号'] || '', opportunityName: r['商机名称'] || '', customerName: r['客户名称'] || '', stage: r['商机阶段'] || '', presale: r['售前'] || '', owner: r['评估负责人'] || '', version: Number(r['版本']) || 1, summary: r['评估结果摘要'] || '', createdAt: normDate(r['生成时间']), createdAtRaw: r['生成时间'] || '', works: (() => { try { return JSON.parse(r['工作类'] || '[]') } catch { return [] } })() }))
+              return json(res, 200, { ok: true, items })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'dev_get') {
+            try {
+              const key = String(url.searchParams.get('key') || '')
+              const rows = await list('devEvals')
+              const r = rows.find((x) => x._id === key || x['评估编号'] === key)
+              if (!r) return json(res, 404, { ok: false, error: '评估不存在' })
+              return json(res, 200, { ok: true, item: { id: r._id, no: r['评估编号'], opportunityNo: r['商机编号'] || '', opportunityName: r['商机名称'] || '', customerName: r['客户名称'] || '', stage: r['商机阶段'] || '', presale: r['售前'] || '', owner: r['评估负责人'] || '', version: Number(r['版本']) || 1, summary: r['评估结果摘要'] || '', createdAt: normDate(r['生成时间']), createdAtRaw: r['生成时间'] || '', works: (() => { try { return JSON.parse(r['工作类'] || '[]') } catch { return [] } })() } })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'dev_save' && req.method === 'POST') {
+            try {
+              const b = await readBody(req)
+              const works = Array.isArray(b.works) ? b.works : []
+              const base = { '商机编号': b.opportunityNo || '', '商机名称': b.opportunityName || '', '客户名称': b.customerName || '', '商机阶段': b.stage || '', '售前': b.presale || '', '评估负责人': b.owner || '', '评估结果摘要': b.summary || '', '工作类': JSON.stringify(works), '生成时间': new Date().toISOString().slice(0, 16).replace('T', ' ') }
+              if (b.id) {
+                const rows = await list('devEvals'); const r = rows.find((x) => x._id === b.id)
+                if (!r) return json(res, 404, { ok: false, error: '评估不存在' })
+                const version = (Number(r['版本']) || 1) + 1
+                await updateRecord('devEvals', b.id, { ...base, '版本': version })
+                return json(res, 200, { ok: true, id: b.id, no: r['评估编号'], version })
+              }
+              const rows = await list('devEvals'); const year = new Date().getFullYear(); let max = 0
+              for (const r of rows) { const m = String(r['评估编号'] || '').match(/PG-(\d{4})-(\d+)/); if (m && Number(m[1]) === year) max = Math.max(max, Number(m[2])) }
+              const no = `PG-${year}-${String(max + 1).padStart(4, '0')}`
+              const [id] = await create('devEvals', [{ ...base, '评估编号': no, '版本': 1 }])
+              return json(res, 200, { ok: true, id, no, version: 1 })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
+          if (route === 'dev_delete' && req.method === 'POST') {
+            try {
+              const b = await readBody(req)
+              await deleteRecord('devEvals', b.id)
+              return json(res, 200, { ok: true })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
           if (route === 'customer_get') {
             try {
               const key = String(url.searchParams.get('key') || '')
