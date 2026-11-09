@@ -156,6 +156,13 @@ button.presales-badge{background:transparent;cursor:pointer}
       return t.slice(0, 10)
     }
 
+    function oppStageClass(st) {
+      if (st === '赢单') return 'ok'
+      if (['丢单', '放弃', '作废'].includes(st)) return 'err'
+      if (['招标阶段', '商务谈判', '方案报价'].includes(st)) return 'warn'
+      return ''
+    }
+
     function OppTab({ onQuote, onReload, onNewOpp }) {
       const [items, setItems] = React.useState([])
       const [board, setBoard] = React.useState(null)
@@ -170,6 +177,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [form, setForm] = React.useState({ way: '电话', person: '', content: '', next: '', date: '', nextDate: '' })
       const [customers, setCustomers] = React.useState([])
       const [oppForm, setOppForm] = React.useState(null)
+      const [editingNo, setEditingNo] = React.useState('')
       const [oppPage, setOppPage] = React.useState(1)
       const [oppSource, setOppSource] = React.useState('')
 
@@ -219,6 +227,14 @@ button.presales-badge{background:transparent;cursor:pointer}
       async function saveOpp() {
         if (!oppForm || !String(oppForm.name || '').trim()) { setMsg({ kind: 'err', text: '商机名称必填' }); return }
         try {
+          if (editingNo) {
+            await api('opp_update', { method: 'POST', body: JSON.stringify({ no: editingNo, fields: oppForm }) })
+            setOppForm(null); setEditingNo('')
+            await load()
+            setMsg({ kind: 'ok', text: `已更新商机 ${editingNo}` })
+            await open(editingNo)
+            return
+          }
           const r = await api('opp_save', { method: 'POST', body: JSON.stringify(oppForm) })
           setOppForm(null)
           await load()
@@ -236,8 +252,8 @@ button.presales-badge{background:transparent;cursor:pointer}
         return h('div', null,
           h('section', { className: 'presales-card' },
             h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
-              h('b', null, '新建商机'),
-              h('button', { className: 'presales-btn', type: 'button', onClick: () => setOppForm(null) }, '取消')),
+              h('b', null, editingNo ? `编辑商机 ${editingNo}` : '新建商机'),
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => { setOppForm(null); setEditingNo('') } }, '取消')),
             h('div', { className: 'presales-grid', style: { marginTop: 8 } },
               h('label', null, h('span', { className: 'presales-label' }, '客户'),
                 h('select', { className: 'presales-select', value: oppForm.customerId || '', onChange: (e) => {
@@ -261,6 +277,26 @@ button.presales-badge{background:transparent;cursor:pointer}
               h('textarea', { className: 'presales-input', style: { minHeight: 70 }, value: oppForm.intro || '', onChange: (e) => setOppForm({ ...oppForm, intro: e.target.value }) })),
             h('div', { className: 'presales-row', style: { marginTop: 8 } },
               h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void saveOpp() }, '保存'))))
+      }
+
+      async function weeklyReport(o) {
+        const prompt = `请读取商机 ${o.no}（${o.name}）的详情和跟进记录，生成一份本周周报：本周进展、风险与问题、下一步计划。`
+        const svc = getSvc('uiWorkspace'); const sessions = getSvc('sessions'); const lay = getSvc('layout')
+        try {
+          if (sessions && typeof sessions.create === 'function') {
+            const id = await sessions.create({})
+            if (id) {
+              if (svc && typeof svc.openSession === 'function') svc.openSession(id)
+              if (lay && typeof lay.selectPanel === 'function') lay.selectPanel(null)
+              await sessions.using(id, { source: 'controllerOperation' }, async (ref) => {
+                await ref.binding.session.prompt([{ type: 'text', text: prompt }], 'queue')
+              })
+              return
+            }
+          }
+        } catch {}
+        try { navigator.clipboard.writeText(prompt) } catch {}
+        setMsg({ kind: 'ok', text: '已复制周报提示词，可新建会话粘贴。' })
       }
 
       if (detail) {
@@ -336,15 +372,22 @@ button.presales-badge{background:transparent;cursor:pointer}
                 h('option', { value: '' }, '全部来源'), sources.map((x) => h('option', { key: x, value: x }, x))),
               h('span', { className: 'presales-muted' }, `共 ${filteredItems.length} 个商机`)),
             h('div', { className: 'presales-row' },
-              h('button', { className: 'presales-btn', type: 'button', onClick: () => setOppForm({ stage: '线索阶段', source: '主动开发', amount: '', expected: '' }) }, '新建商机'),
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => { setEditingNo(''); setOppForm({ stage: '线索阶段', source: '主动开发', amount: '', expected: '' }) } }, '新建商机'),
               h('button', { className: 'presales-btn primary', type: 'button', onClick: () => onNewOpp && onNewOpp() }, '新建商机（对话）'))),
           board ? h('div', { className: 'presales-muted', style: { marginTop: 6 } },
             `总金额 ${board.amount.toFixed(0)} 万 · 赢单 ${board.won} · 赢单率 ${board.total ? ((board.won / board.total) * 100).toFixed(0) + '%' : '-'}`) : null,
           h('table', { className: 'presales-table', style: { marginTop: 8 } },
-            h('thead', null, h('tr', null, ['商机名称', '编号', '客户', '阶段', '金额(万)', '预计落单'].map((t) => h('th', { key: t }, t)))),
+            h('thead', null, h('tr', null, ['商机编号', '商机名称', '客户名称', '销售', '售前', '商机金额(万元)', '创建时间', '更新时间', '商机状态', '预计落单时间', '操作'].map((t) => h('th', { key: t }, t)))),
             h('tbody', null, oppView.map((o) => h('tr', { key: o.id, style: { cursor: 'pointer' }, onClick: () => void open(o.no) },
-              h('td', null, h('b', null, o.name)), h('td', null, o.no), h('td', null, o.customerName || '-'),
-              h('td', null, o.stage || '-'), h('td', null, o.amount ?? 0), h('td', null, normDate(o.expected) || '-')))))),
+              h('td', null, o.no), h('td', null, h('b', null, o.name)), h('td', null, o.customerName || '-'),
+              h('td', null, o.seller || '-'), h('td', null, o.owner || '-'), h('td', null, o.amount ?? 0),
+              h('td', null, normDate(o.createdAt) || '-'), h('td', null, normDate(o.updated) || '-'),
+              h('td', null, h('span', { className: `presales-badge ${oppStageClass(o.stage)}` }, o.stage || '-')),
+              h('td', null, normDate(o.expected) || '-'),
+              h('td', null, h('div', { className: 'presales-row', style: { flexWrap: 'nowrap' }, onClick: (e) => e.stopPropagation() },
+                h('button', { className: 'presales-btn', type: 'button', onClick: () => void open(o.no) }, '详情'),
+                h('button', { className: 'presales-btn', type: 'button', onClick: () => { setEditingNo(o.no); setOppForm({ name: o.name, customerId: customers.find((c) => c.name === o.customerName)?.id || '', customerNo: o.customerNo || '', customerName: o.customerName || '', amount: o.amount, stage: o.stage, expected: o.expected, source: o.source || '主动开发', contact: o.contact || '', phone: o.phone || '', sellerName: o.seller || '', ownerName: o.owner || '', intro: o.intro || '' }) } }, '编辑'),
+                h('button', { className: 'presales-btn', type: 'button', onClick: () => void weeklyReport(o) }, '周报')))))))),
           pager(filteredItems.length, oppCur, setOppPage, oppSize),
         msg ? h('div', { className: `presales-msg ${msg.kind === 'ok' ? 'ok' : 'err'}` }, msg.text) : null)
     }

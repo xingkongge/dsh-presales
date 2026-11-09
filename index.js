@@ -1828,9 +1828,11 @@ for (const [idx, it] of (body.items || []).entries()) {
             if (kw) rows = rows.filter((r) => `${r['商机编号']} ${r['商机名称']} ${r['客户名称']}`.toLowerCase().includes(kw))
             rows.sort((a, b) => String(b['更新时间'] || '').localeCompare(String(a['更新时间'] || '')))
             return json(res, 200, { ok: true, items: rows.map((r) => ({
-              id: r._id, no: r['商机编号'], name: r['商机名称'], customerName: r['客户名称'] || '',
+              id: r._id, no: r['商机编号'], name: r['商机名称'], customerName: r['客户名称'] || '', customerNo: r['客户编号'] || '',
               stage: r['阶段'] || '', amount: Number(r['商机金额万元']) || 0, expected: normDate(r['预计落单时间']),
-              owner: r['售前姓名'] || '', updated: String(r['更新时间'] || '').slice(0, 10), winRate: r['赢单率'] == null ? null : Number(r['赢单率']),
+              seller: r['销售姓名'] || '', owner: r['售前姓名'] || '', source: r['来源'] || '',
+              contact: r['联系人'] || '', phone: r['联系电话'] || '', intro: r['简介'] || '',
+              createdAt: normDate(r['创建时间']), updated: normDate(r['更新时间']), winRate: r['赢单率'] == null ? null : Number(r['赢单率']),
             })) })
           }
           if (route === 'opp') {
@@ -1879,6 +1881,25 @@ for (const [idx, it] of (body.items || []).entries()) {
             const total = rows.length
             const won = rows.filter((r) => r['阶段'] === '赢单').length
             return json(res, 200, { ok: true, total, amount: rows.reduce((s, r) => s + (Number(r['商机金额万元']) || 0), 0), won, stages: agg('阶段'), sources: agg('来源'), top: rows.slice().sort((a, b) => (Number(b['商机金额万元']) || 0) - (Number(a['商机金额万元']) || 0)).slice(0, 5).map((r) => ({ no: r['商机编号'], name: r['商机名称'], amount: Number(r['商机金额万元']) || 0, stage: r['阶段'] })) })
+          }
+          if (route === 'opp_update' && req.method === 'POST') {
+            try {
+              const b = await readBody(req)
+              const rows = await list('opportunities')
+              const r = rows.find((x) => x['商机编号'] === b.no)
+              if (!r) return json(res, 404, { ok: false, error: '商机不存在' })
+              const f = b.fields || {}
+              if (f.stage && !OPP_STAGES.includes(f.stage)) return json(res, 400, { ok: false, error: `阶段必须是：${OPP_STAGES.join('、')}` })
+              const patch = {}
+              const map = { name: '商机名称', amount: '商机金额万元', stage: '阶段', expected: '预计落单时间', source: '来源', contact: '联系人', phone: '联系电话', seller: '销售姓名', owner: '售前姓名', intro: '简介' }
+              for (const [k, field] of Object.entries(map)) if (f[k] !== undefined) patch[field] = k === 'amount' ? Number(f[k]) || 0 : f[k]
+              if (!Object.keys(patch).length) return json(res, 400, { ok: false, error: '没有可更新字段' })
+              await updateRecord('opportunities', r._id, patch)
+              if (f.stage && f.stage !== r['阶段']) {
+                await logOppChange({ oppId: r._id, oppNo: r['商机编号'], field: '阶段', oldValue: r['阶段'] || '', newValue: f.stage, reason: '人工编辑', by: '' })
+              }
+              return json(res, 200, { ok: true })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
           }
           if (route === 'opp_stage' && req.method === 'POST') {
             const body = await readBody(req)
