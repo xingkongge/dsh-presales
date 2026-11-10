@@ -448,6 +448,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [devOpps, setDevOpps] = React.useState([])
       const [devQuery, setDevQuery] = React.useState('')
       const [devPage, setDevPage] = React.useState(1)
+      const devFileRef = React.useRef(null)
       const [lookupBusy, setLookupBusy] = React.useState(false)
       const [lookupSources, setLookupSources] = React.useState([])
       const [industryOptions, setIndustryOptions] = React.useState(GB_INDUSTRIES_FALLBACK)
@@ -1251,6 +1252,24 @@ button.presales-badge{background:transparent;cursor:pointer}
         setDevForm({ ...devForm, works })
       }
 
+      async function parseDevFile(file) {
+        if (!file) return
+        try {
+          const dataUrl = await new Promise((resolve, reject) => {
+            const fr = new FileReader()
+            fr.onload = () => resolve(String(fr.result || ''))
+            fr.onerror = reject
+            fr.readAsDataURL(file)
+          })
+          const b64 = dataUrl.split(',')[1] || ''
+          setMsg({ kind: 'ok', text: '正在识别评估表…' })
+          const r = await api('dev_parse', { method: 'POST', body: JSON.stringify({ fileBase64: b64 }) })
+          if (!r.works || !r.works.length) throw new Error('没有从表格中识别到工作量行')
+          setDevForm({ ...devForm, works: r.works, summary: r.summary, customerName: r.customerName || devForm.customerName || '' })
+          setMsg({ kind: 'ok', text: `已识别 ${r.works.length} 个工作类，合计 ${r.total} 人天，请核对后保存` })
+        } catch (e) { setMsg({ kind: 'err', text: `识别失败：${e.message || e}` }) }
+      }
+
       function renderDevEditor() {
         const works = devForm.works || []
         const sum = (k) => works.reduce((a, w) => a + (Number(w[k]) || 0), 0)
@@ -1278,7 +1297,10 @@ button.presales-badge{background:transparent;cursor:pointer}
           h('section', { className: 'presales-card' },
             h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
               h('b', null, '定制开发工作量测算（人天可调整，总计/占比自动计算）'),
-              h('button', { className: 'presales-btn', type: 'button', onClick: () => setDevForm({ ...devForm, works: works.concat([blankWork()]) }) }, '＋ 添加工作类')),
+              h('div', { className: 'presales-row' },
+                h('input', { ref: devFileRef, type: 'file', accept: '.xlsx,.xls', style: { display: 'none' }, onChange: (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; void parseDevFile(f) } }),
+                h('button', { className: 'presales-btn', type: 'button', onClick: () => devFileRef.current && devFileRef.current.click() }, '上传评估表识别'),
+                h('button', { className: 'presales-btn', type: 'button', onClick: () => setDevForm({ ...devForm, works: works.concat([blankWork()]) }) }, '＋ 添加工作类'))),
             h('div', { style: { overflowX: 'auto' } },
               h('table', { className: 'presales-table', style: { minWidth: 980, marginTop: 8 } },
                 h('thead', null, h('tr', null, ['序号', '模块/工作类', '开发主要内容', '需求/详设人天', '开发人天', '测试人天', '总计', '商机占比', '商机定开人天', '操作'].map((t) => h('th', { key: t }, t)))),

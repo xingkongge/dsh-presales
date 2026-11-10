@@ -2043,6 +2043,56 @@ for (const [idx, it] of (body.items || []).entries()) {
               return json(res, 200, { ok: true, item: { id: r._id, no: r['评估编号'], opportunityNo: r['商机编号'] || '', opportunityName: r['商机名称'] || '', customerName: r['客户名称'] || '', stage: r['商机阶段'] || '', presale: r['售前'] || '', owner: r['评估负责人'] || '', version: Number(r['版本']) || 1, summary: r['评估结果摘要'] || '', createdAt: normDate(r['生成时间']), createdAtRaw: r['生成时间'] || '', works: (() => { try { return JSON.parse(r['工作类'] || '[]') } catch { return [] } })() } })
             } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
           }
+          if (route === 'dev_parse' && req.method === 'POST') {
+            try {
+              const b = await readBody(req)
+              if (!b.fileBase64) return json(res, 400, { ok: false, error: '缺少文件内容' })
+              const wb = XLSX.read(Buffer.from(String(b.fileBase64), 'base64'), { type: 'buffer' })
+              const name = wb.SheetNames.find((x) => x.includes('开发工作量')) || wb.SheetNames[0]
+              const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' })
+              let header = -1
+              for (let i = 0; i < Math.min(rows.length, 20); i += 1) {
+                const r = (rows[i] || []).map((x) => String(x || ''))
+                if (r.includes('阶段') && r.some((x) => x.includes('模块')) && r.some((x) => x.includes('工作量'))) { header = i; break }
+              }
+              if (header < 0) return json(res, 400, { ok: false, error: '没找到“阶段/模块/工作量（人天）”表头，请使用标准评估模板' })
+              const h = (rows[header] || []).map((x) => String(x || ''))
+              const idx = (kw) => h.findIndex((x) => x.includes(kw))
+              const cStage = idx('阶段'); const cModule = idx('模块'); const cFunc = idx('功能'); const cDays = idx('工作量')
+              const works = []
+              let stage = ''
+              for (let i = header + 1; i < rows.length; i += 1) {
+                const r = rows[i] || []
+                const stageCell = String(r[cStage] || '').trim()
+                if (stageCell.includes('合计') || stageCell.includes('总计')) break
+                if (stageCell) stage = stageCell
+                const days = Number(r[cDays]) || 0
+                const module = String(r[cModule] || '').trim()
+                const func = String(r[cFunc] || '').trim()
+                if (!days || (!module && !func)) continue
+                const test = stage.includes('测试')
+                const design = stage.includes('设计')
+                works.push({
+                  module: (module || stage).slice(0, 60),
+                  content: (func || module || stage).replace(/\s+/g, ' ').slice(0, 240),
+                  reqDays: design ? days : 0,
+                  devDays: (!design && !test) ? days : 0,
+                  testDays: test ? days : 0,
+                })
+              }
+              let customerName = ''
+              const infoName = wb.SheetNames.find((x) => x.includes('客户基本信息'))
+              if (infoName) {
+                const info = XLSX.utils.sheet_to_json(wb.Sheets[infoName], { header: 1, defval: '' })
+                for (const r of info) {
+                  const a = String(r[0] || ''); const v = String(r[1] || '')
+                  if (a.includes('客户名称') && v) customerName = v
+                }
+              }
+              const total = works.reduce((a, w) => a + w.reqDays + w.devDays + w.testDays, 0)
+              return json(res, 200, { ok: true, sheet: name, customerName, works, total, summary: `基于《${name}》识别：共 ${works.length} 个工作类，合计 ${total} 人天（需求/详设 ${works.reduce((a, w) => a + w.reqDays, 0)} + 开发 ${works.reduce((a, w) => a + w.devDays, 0)} + 测试 ${works.reduce((a, w) => a + w.testDays, 0)}）` })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
+          }
           if (route === 'dev_save' && req.method === 'POST') {
             try {
               const b = await readBody(req)
