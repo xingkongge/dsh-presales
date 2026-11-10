@@ -225,6 +225,8 @@ export function apply(ctx, rawConfig = {}) {
         strategy: p['销售策略'] || '',
         stdPrice: Number(p['标准价不含税']) || 0,
         costPrice: Number(p['成本价不含税']) || 0,
+        attr: p['产品属性'] || '',
+        warranty: p['质保年限'] || '',
         taxRate: Number(p['税率']) || config.defaultTaxRate,
         grossPrice: Number(p['含税价参考']) || 0,
         minDiscount: Number(p['最低折扣']) || 0,
@@ -1571,7 +1573,7 @@ export function apply(ctx, rawConfig = {}) {
 const catalog = await loadCatalog()
 const lines = []
 const violations = []
-for (const [idx, it] of (body.items || []).entries()) {
+for (const [idx, it] of (inputItems || []).entries()) {
   let p
   if (it.temp) {
     p = {
@@ -1638,6 +1640,9 @@ for (const [idx, it] of (body.items || []).entries()) {
       '当前版本': version, '状态': '草稿',
       '不含税合计': dto.totals.untaxedTotal, '税额合计': dto.totals.taxTotal, '含税合计': dto.totals.grossTotal,
       '毛利率': dto.totals.margin ?? '', '价目表版本': 'v1', '幂等键': key,
+      '报价时间': opts.quoteDate || today(), '软件质保期': Number(opts.softwareWarranty) || 12, '硬件质保期': Number(opts.hardwareWarranty) || 12,
+      '定开评估编号': opts.devEvalNo || '', '定开人天': Number(opts.devDays) || 0, '定开单价': Number(opts.devRate) || 0,
+      '定开金额': Number(opts.devAmount) || 0, '实施费': Number(opts.implementationFee) || 0,
     }])
     const [versionId] = await create('quoteVersions', [{
       '版本标识': versionKey, '报价单': [quoteId], '报价单号': quoteNo, '版本号': 1, '状态': '草稿',
@@ -2420,7 +2425,7 @@ for (const [idx, it] of (body.items || []).entries()) {
             const { lines, violations } = await buildQuoteLinesFromItems(body.items || [])
             if (violations.length) return json(res, 400, { ok: false, error: violations.map((v) => v.message).join('；') })
             const dto = buildQuoteDto({ lines, meta: { customerName: body.customerName || '', customerNo: body.customerNo || '', opportunityNo: body.opportunityNo || '' } })
-            const out = await persistQuote(dto, { template: body.template })
+            const out = await persistQuote(dto, { template: body.template, quoteDate: body.quoteDate, softwareWarranty: body.softwareWarranty, hardwareWarranty: body.hardwareWarranty, devEvalNo: body.devEvalNo, devDays: body.devDays, devRate: body.devRate, devAmount: body.devAmount, implementationFee: body.implementationFee })
             let rendered = null
             try {
               if (body.localTemplateId) {

@@ -124,6 +124,11 @@ button.presales-badge{background:transparent;cursor:pointer}
       return data
     }
 
+    function lineGross(l) {
+      const unit = Math.round((Number(l.stdPrice) || 0) * (Number(l.discount) || 1) * 10000) / 10000
+      return unit * (1 + (Number(l.taxRate) || 0)) * (Number(l.qty) || 0)
+    }
+
     function computeTotals(cart) {
       let untaxed = 0; let tax = 0; let cost = 0
       for (const l of cart) {
@@ -420,6 +425,13 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [tempForm, setTempForm] = React.useState({ name: '', spec: '', brand: '', model: '', unit: '项', qty: 1, price: '' })
       const [tempRfq, setTempRfq] = React.useState(true)
       const [baseQuote, setBaseQuote] = React.useState(null)
+      const [quoteDate, setQuoteDate] = React.useState(new Date().toISOString().slice(0, 10))
+      const [softWarranty, setSoftWarranty] = React.useState(12)
+      const [hardWarranty, setHardWarranty] = React.useState(12)
+      const [devEvalNo, setDevEvalNo] = React.useState('')
+      const [devDays, setDevDays] = React.useState(0)
+      const [devRate, setDevRate] = React.useState(2200)
+      const [implFee, setImplFee] = React.useState(0)
       const [mailPreview, setMailPreview] = React.useState(null)
       const [mailAccounts, setMailAccounts] = React.useState([])
       const [mailFrom, setMailFrom] = React.useState(() => localStorage.getItem('presales.lastRfqFrom') || '')
@@ -468,6 +480,13 @@ button.presales-badge{background:transparent;cursor:pointer}
       const quoteSize = 20
       const quoteCur = Math.min(quotePage, Math.max(1, Math.ceil(quoteRows.length / quoteSize)))
       const quoteView = quoteRows.slice((quoteCur - 1) * quoteSize, quoteCur * quoteSize)
+      const quoteSplit = { '自有产品': { rev: 0, cost: 0 }, '自有服务': { rev: 0, cost: 0 }, '外采设备': { rev: 0, cost: 0 }, '外采服务': { rev: 0, cost: 0 } }
+      for (const l of cart) {
+        const attr = l.attr || (l.temp ? '自有服务' : (String(l.category || '').includes('硬件') ? '外采设备' : '自有产品'))
+        const key = quoteSplit[attr] ? attr : '自有产品'
+        quoteSplit[key].rev += lineGross(l)
+        quoteSplit[key].cost += (Number(l.costPrice) || 0) * (Number(l.qty) || 0)
+      }
 
       async function loadRfqs() {
         try { const r = await api('rfq_list'); setRfqs(r.items || []) } catch {}
@@ -734,6 +753,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               method: 'POST', body: JSON.stringify({
                 customerName: customer.name, customerNo: customer.code || '', opportunityNo: opp ? opp.no : '', template,
                 localTemplateId: localTpl ? localTpl.id : '', localTemplateName: localTpl ? localTpl.name : '', items: cartItemsPayload(),
+                quoteDate, softwareWarranty: softWarranty, hardwareWarranty: hardWarranty, devEvalNo, devDays, devRate, devAmount: Math.round(devDays * devRate), implementationFee: implFee,
               }),
             })
           setMsg({ kind: 'ok', text: useRevision ? `已生成 ${r.quoteNo} ${r.version}（含税 ${money(r.grossTotal)}）` : `已生成 ${r.quoteNo}（含税 ${money(r.grossTotal)}）`, link: r.link || '' })
@@ -1485,7 +1505,41 @@ button.presales-badge{background:transparent;cursor:pointer}
             }, h('option', { value: '' }, opps.length ? '不关联商机' : '先选客户'), opps.map((o) => h('option', { key: o.id, value: o.id }, `${o.no} ${o.name}`)))),
             h('label', null, h('span', { className: 'presales-label' }, '报价模板'), h('select', {
               className: 'presales-select', value: template, onChange: (e) => setTemplate(e.target.value),
-            }, templates.map((t) => h('option', { key: t.name, value: t.name }, `${t.name}${t.default ? '（默认）' : ''}`)))))),
+            }, templates.map((t) => h('option', { key: t.name, value: t.name }, `${t.name}${t.default ? '（默认）' : ''}`)))),
+            h('label', null, h('span', { className: 'presales-label' }, '销售'), h('input', { className: 'presales-input', value: opp?.seller || '', readOnly: true })),
+            h('label', null, h('span', { className: 'presales-label' }, '售前'), h('input', { className: 'presales-input', value: opp?.owner || '', readOnly: true })),
+            h('label', null, h('span', { className: 'presales-label' }, '商机阶段'), h('input', { className: 'presales-input', value: opp?.stage || '', readOnly: true })))),
+          h('section', { className: 'presales-card' },
+            h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+              h('b', null, '报价信息'),
+              h('span', { className: 'presales-muted' }, baseQuote ? `已载入 ${baseQuote.quoteNo} ${baseQuote.version}` : '新建报价')),
+            h('div', { className: 'presales-grid', style: { marginTop: 8 } },
+              h('label', null, h('span', { className: 'presales-label' }, '报价金额（含税）'), h('input', { className: 'presales-input', value: money(totals.gross) + ' 元', readOnly: true })),
+              h('label', null, h('span', { className: 'presales-label' }, '自有产品金额（含税）'), h('input', { className: 'presales-input', value: money(quoteSplit['自有产品'].rev) + ' 元', readOnly: true })),
+              h('label', null, h('span', { className: 'presales-label' }, '自有服务金额（含税）'), h('input', { className: 'presales-input', value: money(quoteSplit['自有服务'].rev) + ' 元', readOnly: true })),
+              h('label', null, h('span', { className: 'presales-label' }, '外采设备金额（含税）'), h('input', { className: 'presales-input', value: money(quoteSplit['外采设备'].rev) + ' 元', readOnly: true })),
+              h('label', null, h('span', { className: 'presales-label' }, '外采服务金额（含税）'), h('input', { className: 'presales-input', value: money(quoteSplit['外采服务'].rev) + ' 元', readOnly: true }))),
+            h('div', { className: 'presales-grid', style: { marginTop: 8 } },
+              h('label', null, h('span', { className: 'presales-label' }, '定制开发项（定开评估）'),
+                h('select', { className: 'presales-select', value: devEvalNo, onChange: (e) => {
+                  const d = devList.find((x) => x.no === e.target.value)
+                  setDevEvalNo(e.target.value)
+                  if (d) setDevDays((d.works || []).reduce((a, w) => a + (Number(w.reqDays) || 0) + (Number(w.devDays) || 0) + (Number(w.testDays) || 0), 0))
+                } }, h('option', { value: '' }, '不关联定开评估'), devList.map((d) => h('option', { key: d.no, value: d.no }, `${d.no} ${d.opportunityName || ''}`)))),
+              h('label', null, h('span', { className: 'presales-label' }, '评估人天'), h('input', { className: 'presales-input', type: 'number', value: devDays, onChange: (e) => setDevDays(Number(e.target.value) || 0) })),
+              h('label', null, h('span', { className: 'presales-label' }, '开发单价（元/人天）'), h('input', { className: 'presales-input', type: 'number', value: devRate, onChange: (e) => setDevRate(Number(e.target.value) || 0) })),
+              h('label', null, h('span', { className: 'presales-label' }, '定开金额'), h('input', { className: 'presales-input', value: money(devDays * devRate) + ' 元', readOnly: true })),
+              h('label', null, h('span', { className: 'presales-label' }, '实施费'), h('input', { className: 'presales-input', type: 'number', value: implFee, onChange: (e) => setImplFee(Number(e.target.value) || 0) }))),
+            h('div', { className: 'presales-grid', style: { marginTop: 8 } },
+              h('label', null, h('span', { className: 'presales-label' }, '报价时间'), h('input', { className: 'presales-input', placeholder: 'YYYY-MM-DD', value: quoteDate, onChange: (e) => setQuoteDate(e.target.value) })),
+              h('label', null, h('span', { className: 'presales-label' }, '软件质保期（月）'), h('input', { className: 'presales-input', type: 'number', value: softWarranty, onChange: (e) => setSoftWarranty(Number(e.target.value) || 0) })),
+              h('label', null, h('span', { className: 'presales-label' }, '硬件质保期（月）'), h('input', { className: 'presales-input', type: 'number', value: hardWarranty, onChange: (e) => setHardWarranty(Number(e.target.value) || 0) }))),
+            h('div', { className: 'presales-muted', style: { margin: '12px 0 4px' } }, '利润率分析（含税，成本按产品目录成本价）'),
+            h('table', { className: 'presales-table' },
+              h('thead', null, h('tr', null, ['类别', '报价金额', '成本', '利润', '利润率'].map((t) => h('th', { key: t }, t)))),
+              h('tbody', null, Object.entries(quoteSplit).map(([k, v]) => h('tr', { key: k },
+                h('td', null, h('b', null, k)), h('td', null, money(v.rev)), h('td', null, money(v.cost)),
+                h('td', null, money(v.rev - v.cost)), h('td', null, v.rev ? ((v.rev - v.cost) / v.rev * 100).toFixed(1) + '%' : '-')))))),
           h('div', { className: 'presales-row', style: { marginTop: 8 } },
             h('button', { className: 'presales-btn', type: 'button', disabled: !opp, onClick: () => void reuseLastQuote() },
               baseQuote ? `已载入 ${baseQuote.quoteNo} ${baseQuote.version}，保存生成下一版` : '复用上一轮报价'),
@@ -1558,15 +1612,15 @@ button.presales-badge{background:transparent;cursor:pointer}
                 h('td', null, h('input', { className: 'presales-input', style: { width: 160 }, value: l.spec || '', onChange: (e) => patch(itemKey(l), 'spec', e.target.value) })),
                 h('td', null, h('select', { className: 'presales-select', style: { maxWidth: 150 }, value: l.section || section, onChange: (e) => patch(itemKey(l), 'section', e.target.value) },
                   (sections.length ? sections.map((x) => x.title) : [l.section || section || '产品报价']).map((t) => h('option', { key: t, value: t }, t)))),
-                h('td', null, h('input', { className: 'presales-input', style: { width: 100 }, value: l.category || '', onChange: (e) => patch(itemKey(l), 'category', e.target.value) })),
+                h('td', null, h('select', { className: 'presales-select', style: { maxWidth: 120 }, value: l.attr || (String(l.category || '').includes('硬件') ? '外采设备' : '自有产品'), onChange: (e) => patch(itemKey(l), 'attr', e.target.value) }, ['自有产品', '自有服务', '外采设备', '外采服务'].map((a) => h('option', { key: a, value: a }, a)))),
                 h('td', null, h('input', { className: 'presales-input', style: { width: 90 }, value: l.brand || '', onChange: (e) => patch(itemKey(l), 'brand', e.target.value) })),
                 h('td', null, h('input', { className: 'presales-input', style: { width: 110 }, value: l.model || '', onChange: (e) => patch(itemKey(l), 'model', e.target.value) })),
                 h('td', null, h('input', { className: 'presales-input', style: { width: 55 }, value: l.unit || '', onChange: (e) => patch(itemKey(l), 'unit', e.target.value) })),
-                h('td', null, h('input', { type: 'number', min: 0, style: { width: 90 }, value: l.stdPrice, onChange: (e) => patch(itemKey(l), 'stdPrice', Number(e.target.value)) })),
+                h('td', null, h('input', { type: 'number', min: 0, style: { width: 90 }, value: l.stdPrice, onChange: (e) => patch(itemKey(l), 'stdPrice', Number(e.target.value)) }), h('div', { className: 'presales-muted' }, `成本 ${l.costPrice ? money(l.costPrice) : '-'}`)),
                 h('td', null, h('input', { type: 'number', min: 0, style: { width: 60 }, value: l.qty, onChange: (e) => patch(itemKey(l), 'qty', Number(e.target.value)) })),
                 h('td', null, h('input', { type: 'number', min: 0.01, max: 1, step: 0.01, style: { width: 60 }, value: l.discount, onChange: (e) => patch(itemKey(l), 'discount', Number(e.target.value)) })),
                 h('td', null, h('input', { type: 'number', min: 0, max: 1, step: 0.01, style: { width: 60 }, value: l.taxRate ?? 0.13, onChange: (e) => patch(itemKey(l), 'taxRate', Number(e.target.value)) })),
-                h('td', null, money(gross)),
+                h('td', null, money(gross), h('div', { className: 'presales-muted' }, l.costPrice ? `毛利 ${((gross - l.costPrice * l.qty) / gross * 100).toFixed(0)}%` : '-')),
                 h('td', null, h('input', { className: 'presales-input', style: { width: 120 }, value: l.remark || '', onChange: (e) => patch(itemKey(l), 'remark', e.target.value) })),
                 h('td', null,
                   l.temp ? h('button', { className: 'presales-btn', type: 'button', onClick: () => void fillRfqPrice(l) }, '回填价') : null,
