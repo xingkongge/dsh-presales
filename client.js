@@ -1612,7 +1612,7 @@ button.presales-badge{background:transparent;cursor:pointer}
                 h('td', null, h('input', { className: 'presales-input', style: { width: 160 }, value: l.spec || '', onChange: (e) => patch(itemKey(l), 'spec', e.target.value) })),
                 h('td', null, h('select', { className: 'presales-select', style: { maxWidth: 150 }, value: l.section || section, onChange: (e) => patch(itemKey(l), 'section', e.target.value) },
                   (sections.length ? sections.map((x) => x.title) : [l.section || section || '产品报价']).map((t) => h('option', { key: t, value: t }, t)))),
-                h('td', null, h('select', { className: 'presales-select', style: { maxWidth: 120 }, value: l.attr || (String(l.category || '').includes('硬件') ? '外采设备' : '自有产品'), onChange: (e) => patch(itemKey(l), 'attr', e.target.value) }, ['自有产品', '自有服务', '外采设备', '外采服务'].map((a) => h('option', { key: a, value: a }, a)))),
+                h('td', null, h('input', { className: 'presales-input', style: { width: 100 }, value: l.category || '', onChange: (e) => patch(itemKey(l), 'category', e.target.value) })),
                 h('td', null, h('input', { className: 'presales-input', style: { width: 90 }, value: l.brand || '', onChange: (e) => patch(itemKey(l), 'brand', e.target.value) })),
                 h('td', null, h('input', { className: 'presales-input', style: { width: 110 }, value: l.model || '', onChange: (e) => patch(itemKey(l), 'model', e.target.value) })),
                 h('td', null, h('input', { className: 'presales-input', style: { width: 55 }, value: l.unit || '', onChange: (e) => patch(itemKey(l), 'unit', e.target.value) })),
