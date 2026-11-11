@@ -583,7 +583,7 @@ button.presales-badge{background:transparent;cursor:pointer}
         const item = {
           code: `TMP-${Date.now()}`, name: tempForm.name.trim(), spec: tempForm.spec, brand: tempForm.brand,
           model: tempForm.model, unit: tempForm.unit || '项', stdPrice: Number(tempForm.price) || 0,
-          taxRate: 0.13, qty: Number(tempForm.qty) || 1, discount: 1, temp: true, section: tempForm.section || section, category: tempForm.category || '', remark: tempForm.remark || '',
+          taxRate: 0.13, qty: Number(tempForm.qty) || 1, discount: 1, temp: true, section: tempForm.section || section, category: tempForm.category || '', attr: tempForm.attr || '自有服务', remark: tempForm.remark || '',
           uid: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         }
         setCart((prev) => [...prev, item])
@@ -1635,7 +1635,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               h('td', null, h('select', { className: 'presales-select', value: tempForm.section || section, onChange: (e) => setTempForm({ ...tempForm, section: e.target.value }) },
                 (sections.length ? sections.map((x) => x.title) : [section || '产品报价']).map((t) => h('option', { key: t, value: t }, t)))),
               h('td', null, h('input', { className: 'presales-input', style: { width: 100 }, value: tempForm.category || '', onChange: (e) => setTempForm({ ...tempForm, category: e.target.value }) })),
-              h('td', null, h('span', { className: 'presales-muted' }, '自有服务')),
+              h('td', null, h('select', { className: 'presales-select', style: { maxWidth: 120 }, value: tempForm.attr || '自有服务', onChange: (e) => setTempForm({ ...tempForm, attr: e.target.value }) }, ['自有产品', '自有服务', '外采设备', '外采服务'].map((a) => h('option', { key: a, value: a }, a)))),
               h('td', null, h('input', { className: 'presales-input', style: { width: 90 }, value: tempForm.brand, onChange: (e) => setTempForm({ ...tempForm, brand: e.target.value }) })),
               h('td', null, h('input', { className: 'presales-input', style: { width: 110 }, value: tempForm.model, onChange: (e) => setTempForm({ ...tempForm, model: e.target.value }) })),
               h('td', null, h('input', { className: 'presales-input', style: { width: 55 }, value: tempForm.unit, onChange: (e) => setTempForm({ ...tempForm, unit: e.target.value }) })),
