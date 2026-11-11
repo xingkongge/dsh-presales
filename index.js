@@ -873,7 +873,7 @@ export function apply(ctx, rawConfig = {}) {
         '规格': l.spec, '品牌': l.brand, '型号': l.model, '单位': l.unit, '数量': l.qty,
         '标准未税单价': l.stdPrice, '折扣': l.discount, '不含税单价': l.untaxedUnit, '税率': l.taxRate,
         '税额': l.tax, '含税单价': l.grossUnit, '不含税小计': l.untaxedSubtotal, '含税小计': l.grossSubtotal, '备注': l.remark || '',
-        '行类型': l.lineType || '目录产品', '询价编号': l.rfqNo || '', '价格状态': l.priceStatus || '已定价',
+        '行类型': l.lineType || '目录产品', '产品属性': l.attr || '', '询价编号': l.rfqNo || '', '价格状态': l.priceStatus || '已定价',
       })))
       let link = ''
       try {
@@ -1534,7 +1534,7 @@ export function apply(ctx, rawConfig = {}) {
       grossUnit: Number(i['含税单价']) || 0, grossSubtotal: Number(i['含税小计']) || 0,
       costSubtotal: 0, section: i['分节'] || '一、产品报价', remark: i['备注'] || '',
       category: byCode.get(i['产品编码'])?.l2 || '',
-      lineType: i['行类型'] || '目录产品', rfqNo: i['询价编号'] || '', priceStatus: i['价格状态'] || '已定价',
+      lineType: i['行类型'] || '目录产品', attr: i['产品属性'] || byCode.get(i['产品编码'])?.attr || '', rfqNo: i['询价编号'] || '', priceStatus: i['价格状态'] || '已定价',
     }))
     return {
       customerName: q['客户名称'] || '', customerNo: q['客户编号'] || '', opportunityNo: q['商机编号'] || '',
@@ -1611,7 +1611,7 @@ for (const [idx, it] of (inputItems || []).entries()) {
       lineType: it.temp ? '临时产品' : '目录产品',
       rfqNo: it.rfqNo || '',
       priceStatus: it.temp ? (Number(it.price) > 0 ? '暂估' : '待询价') : '已定价',
-      remark: it.remark || (it.temp ? `临时产品（${it.rfqNo || '待询价'}）` : (e.remark || '')), category: e.category,
+      remark: it.remark || (it.temp ? `临时产品（${it.rfqNo || '待询价'}）` : (e.remark || '')), category: e.category, attr: p.attr || '' ,
     })
   }
 }
@@ -1656,7 +1656,7 @@ for (const [idx, it] of (inputItems || []).entries()) {
       '规格': l.spec, '品牌': l.brand, '型号': l.model, '单位': l.unit, '数量': l.qty,
       '标准未税单价': l.stdPrice, '折扣': l.discount, '不含税单价': l.untaxedUnit, '税率': l.taxRate,
       '税额': l.tax, '含税单价': l.grossUnit, '不含税小计': l.untaxedSubtotal, '含税小计': l.grossSubtotal, '备注': l.remark || '',
-        '行类型': l.lineType || '目录产品', '询价编号': l.rfqNo || '', '价格状态': l.priceStatus || '已定价',
+        '行类型': l.lineType || '目录产品', '产品属性': l.attr || '', '询价编号': l.rfqNo || '', '价格状态': l.priceStatus || '已定价',
     })))
     return { quoteNo, quoteId, versionId, itemCount: itemIds.length, grossTotal: dto.totals.grossTotal }
   }
@@ -2408,7 +2408,7 @@ for (const [idx, it] of (inputItems || []).entries()) {
                 '规格': l.spec, '品牌': l.brand, '型号': l.model, '单位': l.unit, '数量': l.qty,
                 '标准未税单价': l.stdPrice, '折扣': l.discount, '不含税单价': l.untaxedUnit, '税率': l.taxRate,
                 '税额': l.tax, '含税单价': l.grossUnit, '不含税小计': l.untaxedSubtotal, '含税小计': l.grossSubtotal, '备注': l.remark || '',
-                '行类型': l.lineType || '目录产品', '询价编号': l.rfqNo || '', '价格状态': l.priceStatus || '已定价',
+                '行类型': l.lineType || '目录产品', '产品属性': l.attr || '', '询价编号': l.rfqNo || '', '价格状态': l.priceStatus || '已定价',
               })))
               let link = ''
               try {

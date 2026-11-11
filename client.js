@@ -722,8 +722,8 @@ button.presales-badge{background:transparent;cursor:pointer}
       }
 
       const cartItemsPayload = () => cart.map((x) => x.temp
-        ? ({ temp: true, code: x.code, name: x.name, spec: x.spec, brand: x.brand, model: x.model, unit: x.unit, qty: Number(x.qty) || 0, price: Number(x.stdPrice) || 0, section: x.section || '', category: x.category || '', remark: x.remark || '', taxRate: Number(x.taxRate) || 0.13 })
-        : ({ code: x.code, qty: Number(x.qty) || 0, discount: Number(x.discount) || 1, section: x.section || '', brand: x.brand, model: x.model, unit: x.unit, name: x.name, spec: x.spec, category: x.category || '', remark: x.remark || '', taxRate: Number(x.taxRate) || 0.13, stdPrice: Number(x.stdPrice) }))
+        ? ({ temp: true, code: x.code, name: x.name, spec: x.spec, brand: x.brand, model: x.model, unit: x.unit, qty: Number(x.qty) || 0, price: Number(x.stdPrice) || 0, section: x.section || '', category: x.category || '', attr: x.attr || '', remark: x.remark || '', taxRate: Number(x.taxRate) || 0.13 })
+        : ({ code: x.code, qty: Number(x.qty) || 0, discount: Number(x.discount) || 1, section: x.section || '', brand: x.brand, model: x.model, unit: x.unit, name: x.name, spec: x.spec, category: x.category || '', attr: x.attr || '', remark: x.remark || '', taxRate: Number(x.taxRate) || 0.13, stdPrice: Number(x.stdPrice) }))
 
       async function reuseLastQuote() {
         if (!opp) { setMsg({ kind: 'err', text: '请先选择商机' }); return }
@@ -734,7 +734,7 @@ button.presales-badge{background:transparent;cursor:pointer}
             uid: `base-${Date.now()}-${i}`, code: l.code, name: l.name, spec: l.spec || '', brand: l.brand || '', model: l.model || '',
             unit: l.unit || '', stdPrice: Number(l.stdPrice) || 0, taxRate: Number(l.taxRate) || 0.13,
             qty: Number(l.qty) || 1, discount: Number(l.discount) || 1, section: l.section || section,
-            category: l.category || '', remark: l.remark || '', temp: String(l.lineType || '').includes('临时'),
+            category: l.category || '', attr: l.attr || '', remark: l.remark || '', temp: String(l.lineType || '').includes('临时'),
           })))
           setBaseQuote({ quoteNo: r.quote.quoteNo, version: r.quote.currentVersion })
           setMsg({ kind: 'ok', text: `已载入 ${r.quote.quoteNo} ${r.quote.currentVersion}，保存后生成下一版本` })
@@ -1220,7 +1220,7 @@ button.presales-badge{background:transparent;cursor:pointer}
           uid: `q-${Date.now()}-${i}`, code: l.code, name: l.name, spec: l.spec || '', brand: l.brand || '', model: l.model || '',
           unit: l.unit || '', stdPrice: Number(l.stdPrice) || 0, taxRate: Number(l.taxRate) || 0.13,
           qty: Number(l.qty) || 1, discount: Number(l.discount) || 1, section: l.section || section,
-          category: l.category || '', remark: l.remark || '', temp: String(l.lineType || '').includes('临时'),
+          category: l.category || '', attr: l.attr || '', remark: l.remark || '', temp: String(l.lineType || '').includes('临时'),
         })))
       }
 
@@ -1536,7 +1536,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               h('label', null, h('span', { className: 'presales-label' }, '硬件质保期（月）'), h('input', { className: 'presales-input', type: 'number', value: hardWarranty, onChange: (e) => setHardWarranty(Number(e.target.value) || 0) }))),
             h('div', { className: 'presales-muted', style: { margin: '12px 0 4px' } }, '利润率分析（含税，成本按产品目录成本价）'),
             h('table', { className: 'presales-table' },
-              h('thead', null, h('tr', null, ['类别', '报价金额', '成本', '利润', '利润率'].map((t) => h('th', { key: t }, t)))),
+              h('thead', null, h('tr', null, ['产品属性', '报价金额', '成本', '利润', '利润率'].map((t) => h('th', { key: t }, t)))),
               h('tbody', null, Object.entries(quoteSplit).map(([k, v]) => h('tr', { key: k },
                 h('td', null, h('b', null, k)), h('td', null, money(v.rev)), h('td', null, money(v.cost)),
                 h('td', null, money(v.rev - v.cost)), h('td', null, v.rev ? ((v.rev - v.cost) / v.rev * 100).toFixed(1) + '%' : '-')))))),
@@ -1598,9 +1598,9 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void syncRfqReplies() }, '同步询价回复'),
             h('button', { className: 'presales-btn', type: 'button', disabled: busy, onClick: () => void batchMail() }, `生成询价单（${Object.values(selected).filter(Boolean).length} 项）`)),
 
-          (cart.length || tempOpen) ? h('table', { className: 'presales-table', style: { minWidth: 1500 } },
+          (cart.length || tempOpen) ? h('div', { style: { overflowX: 'auto' } }, h('table', { className: 'presales-table', style: { minWidth: 1700 } },
             h('thead', null, h('tr', null,
-              ['选', '序号', '产品', '规格', '分节', '产品类型', '品牌', '型号', '单位', '未税单价', '数量', '折扣', '税率', '含税小计', '备注', ''].map((t) => h('th', { key: t }, t)))),
+              ['选', '序号', '产品', '规格', '分节', '产品类型', '产品属性', '品牌', '型号', '单位', '未税单价', '数量', '折扣', '税率', '含税小计', '备注', ''].map((t) => h('th', { key: t }, t)))),
             h('tbody', null, cart.map((l, rowIndex) => {
               const rowNo = rowIndex + 1
               const unit = round(l.stdPrice * l.discount, 4)
@@ -1613,6 +1613,7 @@ button.presales-badge{background:transparent;cursor:pointer}
                 h('td', null, h('select', { className: 'presales-select', style: { maxWidth: 150 }, value: l.section || section, onChange: (e) => patch(itemKey(l), 'section', e.target.value) },
                   (sections.length ? sections.map((x) => x.title) : [l.section || section || '产品报价']).map((t) => h('option', { key: t, value: t }, t)))),
                 h('td', null, h('input', { className: 'presales-input', style: { width: 100 }, value: l.category || '', onChange: (e) => patch(itemKey(l), 'category', e.target.value) })),
+                h('td', null, h('span', { className: 'presales-muted' }, l.attr || '-')),
                 h('td', null, h('input', { className: 'presales-input', style: { width: 90 }, value: l.brand || '', onChange: (e) => patch(itemKey(l), 'brand', e.target.value) })),
                 h('td', null, h('input', { className: 'presales-input', style: { width: 110 }, value: l.model || '', onChange: (e) => patch(itemKey(l), 'model', e.target.value) })),
                 h('td', null, h('input', { className: 'presales-input', style: { width: 55 }, value: l.unit || '', onChange: (e) => patch(itemKey(l), 'unit', e.target.value) })),
@@ -1634,6 +1635,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               h('td', null, h('select', { className: 'presales-select', value: tempForm.section || section, onChange: (e) => setTempForm({ ...tempForm, section: e.target.value }) },
                 (sections.length ? sections.map((x) => x.title) : [section || '产品报价']).map((t) => h('option', { key: t, value: t }, t)))),
               h('td', null, h('input', { className: 'presales-input', style: { width: 100 }, value: tempForm.category || '', onChange: (e) => setTempForm({ ...tempForm, category: e.target.value }) })),
+              h('td', null, h('span', { className: 'presales-muted' }, '自有服务')),
               h('td', null, h('input', { className: 'presales-input', style: { width: 90 }, value: tempForm.brand, onChange: (e) => setTempForm({ ...tempForm, brand: e.target.value }) })),
               h('td', null, h('input', { className: 'presales-input', style: { width: 110 }, value: tempForm.model, onChange: (e) => setTempForm({ ...tempForm, model: e.target.value }) })),
               h('td', null, h('input', { className: 'presales-input', style: { width: 55 }, value: tempForm.unit, onChange: (e) => setTempForm({ ...tempForm, unit: e.target.value }) })),
@@ -1645,7 +1647,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               h('td', null, h('input', { className: 'presales-input', style: { width: 120 }, value: tempForm.remark || '', onChange: (e) => setTempForm({ ...tempForm, remark: e.target.value }) })),
               h('td', null,
                 h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void addTemp() }, '保存'))) : null,
-            )) : h('div', { className: 'presales-muted' }, '还没有明细；先从上面选分节、挂产品，或新增临时产品'),
+            ))) : h('div', { className: 'presales-muted' }, '还没有明细；先从上面选分节、挂产品，或新增临时产品'),
           h('div', { className: 'presales-total', style: { marginTop: 12 } },
             h('span', null, '未税 ', h('b', null, money(totals.untaxed))),
             h('span', null, '税额 ', h('b', null, money(totals.tax))),
