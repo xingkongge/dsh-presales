@@ -90,6 +90,19 @@ export function apply(ctx, rawConfig = {}) {
     return () => clearInterval(timer)
   })
 
+  const ASSET_SOURCES = [
+    { key: 'ip-tax', group: '知识产权', name: '软件退税清单', node: 'cqYIurjSxV0E' },
+    { key: 'ip-paper', group: '知识产权', name: '论文', node: 'cmJgMVd5ZUmu' },
+    { key: 'ip-patent', group: '知识产权', name: '专利', node: 'cgAG2QPXnde8' },
+    { key: 'ip-copyright', group: '知识产权', name: '软件著作权', node: 'cdAyjZBgGo7i' },
+    { key: 'biz-test', group: '商务资料', name: '测试报告（兼容性）', node: 'csC8asp43nKr' },
+    { key: 'biz-honor', group: '商务资料', name: '荣誉奖项', node: 'ccgitzza3wpU' },
+    { key: 'biz-qual', group: '商务资料', name: '公司资质', node: 'cpqvCgH92V2I' },
+    { key: 'biz-audit', group: '商务资料', name: '财务审计报告', node: 'cnR4bjvtmpCE' },
+    { key: 'hr-file', group: '人员档案', name: '人员档案', node: 'cphYdX6ChkAN' },
+  ]
+  const assetRealCache = new Map()
+
   const register = (def) => ctx.tools.register(def)
 
   async function ready() {
@@ -2031,6 +2044,44 @@ for (const [idx, it] of (inputItems || []).entries()) {
           }
           if (route === 'industry_options') {
             return json(res, 200, { ok: true, items: GB_INDUSTRIES })
+          }
+          if (route === 'asset_sources') {
+            return json(res, 200, { ok: true, items: ASSET_SOURCES.map((x) => ({ key: x.key, name: x.name, group: x.group })) })
+          }
+          if (route === 'asset_list') {
+            try {
+              const key = String(url.searchParams.get('key') || '')
+              const src = ASSET_SOURCES.find((x) => x.key === key)
+              if (!src) return json(res, 404, { ok: false, error: '未知资料分类' })
+              const cli = await cliOk()
+              let real = assetRealCache.get(src.node)
+              if (!real) {
+                const meta = await runCli(cli, ['api', 'get', `/v7/files/${src.node}/meta`, '-o', 'json'])
+                real = meta.json?.data?.id
+                if (!real) return json(res, 500, { ok: false, error: `解析文件失败：${meta.stderr || meta.stdout}` })
+                assetRealCache.set(src.node, real)
+              }
+              const schema = await runCli(cli, ['dbsheet', 'schema', 'get', real, '-o', 'json'])
+              if (!schema.ok) return json(res, 500, { ok: false, error: `读取表结构失败：${schema.stderr || schema.stdout}` })
+              const sheets = (schema.json?.data?.sheets || []).filter((x) => x.name !== '仪表盘')
+              const sheet = sheets.slice().sort((a, b) => ((b.fields || []).length) - ((a.fields || []).length))[0]
+              if (!sheet) return json(res, 200, { ok: true, source: src.name, fields: [], rows: [], total: 0 })
+              const recs = await runCli(cli, ['dbsheet', 'record', 'list', real, String(sheet.id), '--page-size', '50', '-o', 'json'])
+              if (!recs.ok) return json(res, 500, { ok: false, error: `读取记录失败：${recs.stderr || recs.stdout}` })
+              const fields = (sheet.fields || []).filter((f) => !['创建时间','更新时间'].includes(f.name)).map((f) => f.name).slice(0, 8)
+              const rows = (recs.json?.data?.records || []).map((r) => {
+                const f = JSON.parse(r.fields || '{}')
+                return fields.map((name) => {
+                  const v = f[name]
+                  if (v === null || v === undefined) return ''
+                  if (Array.isArray(v)) return v.map((x) => (x && typeof x === 'object' ? (x.name || x.fileName || x.displayText || '') : String(x))).filter(Boolean).join('、')
+                  if (typeof v === 'object') return v.name || v.fileName || v.displayText || ''
+                  if (typeof v === 'boolean') return v ? '是' : '否'
+                  return String(v)
+                })
+              })
+              return json(res, 200, { ok: true, source: src.name, sheetName: sheet.name, fields, rows, total: rows.length })
+            } catch (e) { return json(res, 500, { ok: false, error: String(e.message || e) }) }
           }
           if (route === 'dev_list') {
             try {

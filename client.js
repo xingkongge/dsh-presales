@@ -460,6 +460,12 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [devOpps, setDevOpps] = React.useState([])
       const [devQuery, setDevQuery] = React.useState('')
       const [devPage, setDevPage] = React.useState(1)
+      const [assetOpen, setAssetOpen] = React.useState(false)
+      const [assetSources, setAssetSources] = React.useState([])
+      const [assetKey, setAssetKey] = React.useState('')
+      const [assetData, setAssetData] = React.useState(null)
+      const [assetQuery, setAssetQuery] = React.useState('')
+      const [assetLoading, setAssetLoading] = React.useState(false)
       const devFileRef = React.useRef(null)
       const [lookupBusy, setLookupBusy] = React.useState(false)
       const [lookupSources, setLookupSources] = React.useState([])
@@ -1342,6 +1348,74 @@ button.presales-badge{background:transparent;cursor:pointer}
               h('button', { className: 'presales-btn', type: 'button', onClick: () => setDevForm(null) }, '取消'))))
       }
 
+      async function openAssets() {
+        setAssetOpen(true); setAssetData(null); setAssetLoading(true)
+        try {
+          const r = await api('asset_sources'); setAssetSources(r.items || [])
+          const first = (r.items || [])[0]
+          if (first) { setAssetKey(first.key); await loadAsset(first.key) }
+        } catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setAssetLoading(false) }
+      }
+
+      async function loadAsset(key) {
+        setAssetKey(key); setAssetData(null); setAssetLoading(true)
+        try { setAssetData(await api('asset_list?key=' + encodeURIComponent(key))) }
+        catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setAssetLoading(false) }
+      }
+
+      async function askAsset() {
+        const q = assetQuery.trim()
+        if (!q) return
+        const src = assetSources.find((x) => x.key === assetKey)
+        const prompt = `请用 cnbm知识库工具查询并回答：${q}\n\n资料范围：${src ? src.name : '资料查询'}。优先给出具体条目/字段；查不到就明确说未找到，不要编造。`
+        const sessions = getSvc('sessions'); const svc = getSvc('uiWorkspace'); const lay = getSvc('layout')
+        try {
+          if (sessions && typeof sessions.create === 'function') {
+            const id = await sessions.create({})
+            if (id) {
+              if (svc && typeof svc.openSession === 'function') svc.openSession(id)
+              if (lay && typeof lay.selectPanel === 'function') lay.selectPanel(null)
+              await sessions.using(id, { source: 'controllerOperation' }, async (ref) => { await ref.binding.session.prompt([{ type: 'text', text: prompt }], 'queue') })
+              return
+            }
+          }
+        } catch {}
+        try { navigator.clipboard.writeText(prompt) } catch {}
+        setMsg({ kind: 'ok', text: '已复制查询提示词，可新建会话粘贴。' })
+      }
+
+      function renderAssetPage() {
+        const groups = [...new Set(assetSources.map((x) => x.group))]
+        return h('div', { className: 'presales-panel' },
+          h('header', { className: 'presales-head' },
+            h('div', null,
+              h('div', { className: 'presales-title' }, '数字售前'),
+              h('div', { className: 'presales-sub' }, '资料查询 · 知识产权 / 商务资料 / 人员档案')),
+            h('button', { className: 'presales-btn', type: 'button', onClick: () => setAssetOpen(false) }, '← 返回工作台')),
+          h('div', { className: 'presales-row', style: { alignItems: 'stretch', flexWrap: 'nowrap', gap: 12 } },
+            h('section', { className: 'presales-card', style: { width: 260, flex: '0 0 260px' } },
+              h('b', null, '资料分类'),
+              groups.map((g) => h('div', { key: g, style: { marginTop: 10 } },
+                h('div', { className: 'presales-muted', style: { marginBottom: 4 } }, g),
+                assetSources.filter((x) => x.group === g).map((x) => h('button', {
+                  key: x.key, type: 'button', className: 'presales-tree-l1' + (assetKey === x.key ? ' active' : ''),
+                  style: { width: '100%' }, onClick: () => void loadAsset(x.key),
+                }, x.name))))),
+            h('section', { className: 'presales-card', style: { flex: '1 1 auto', minWidth: 0 } },
+              h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
+                h('b', null, assetData ? `${assetData.source}${assetData.sheetName ? ' · ' + assetData.sheetName : ''}` : '资料清单'),
+                h('span', { className: 'presales-muted' }, assetData ? `共 ${assetData.total} 条（前 50）` : '')),
+              h('div', { className: 'presales-row', style: { marginTop: 8 } },
+                h('input', { className: 'presales-input', style: { flex: 1, minWidth: 220 }, placeholder: '问 AI：例如“有哪些消防相关软著/资质”', value: assetQuery, onChange: (e) => setAssetQuery(e.target.value), onKeyDown: (e) => { if (e.key === 'Enter') void askAsset() } }),
+                h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void askAsset() }, '问 AI')),
+              assetLoading ? h('div', { className: 'presales-muted', style: { marginTop: 12 } }, '加载中…') : null,
+              assetData && assetData.fields && assetData.fields.length ? h('div', { style: { overflowX: 'auto', marginTop: 10 } },
+                h('table', { className: 'presales-table', style: { minWidth: 900 } },
+                  h('thead', null, h('tr', null, assetData.fields.map((f) => h('th', { key: f }, f)))),
+                  h('tbody', null, assetData.rows.map((row, i) => h('tr', { key: i }, row.map((v, j) => h('td', { key: j, title: v, style: { maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, v || '-'))))))) : null,
+              assetData && !assetData.rows.length ? h('div', { className: 'presales-muted', style: { marginTop: 10 } }, '该分类暂无数据') : null)))
+      }
+
       function renderDevList() {
         const q = devQuery.trim().toLowerCase()
         const rows = devList.filter((x) => !q || `${x.no} ${x.opportunityName} ${x.customerName}`.toLowerCase().includes(q))
@@ -1405,7 +1479,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               status ? h('button', { className: `presales-badge ${status.ok ? 'ok' : 'err'}`, type: 'button', onClick: () => setShowCounts(!showCounts) }, status.ok ? 'WPS 已连接' : '未连接') : null,
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估')),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估'), h('button', { className: 'presales-tab', type: 'button', onClick: () => void openAssets() }, '资料查询')),
           updatesOpen ? renderUpdateCard() : null,
           renderRfqTab(),
           renderMailCard())
@@ -1421,7 +1495,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               status ? h('button', { className: `presales-badge ${status.ok ? 'ok' : 'err'}`, type: 'button', onClick: () => setShowCounts(!showCounts) }, status.ok ? 'WPS 已连接' : '未连接') : null,
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估')),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估'), h('button', { className: 'presales-tab', type: 'button', onClick: () => void openAssets() }, '资料查询')),
           updatesOpen ? renderUpdateCard() : null,
           renderCustomerTab())
       }
@@ -1441,11 +1515,13 @@ button.presales-badge{background:transparent;cursor:pointer}
               showCounts && status ? h('span', { className: 'presales-muted' }, `产品 ${status.counts?.products ?? '-'} · 客户 ${status.counts?.customers ?? '-'} · 报价 ${status.counts?.quotes ?? '-'}`) : null,
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新', updates && updates.some((u) => u.hasUpdate) ? h('span', { className: 'presales-dot' }) : null),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估')),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估'), h('button', { className: 'presales-tab', type: 'button', onClick: () => void openAssets() }, '资料查询')),
           updatesOpen ? renderUpdateCard() : null,
           chatNotice ? h('div', { className: 'presales-msg ok' }, chatNotice) : null,
           h(OppTab, { onQuote: () => setTab('quote'), onNewOpp: () => void newOppChat() }))
       }
+
+      if (assetOpen) return renderAssetPage()
 
       if (tab === 'dev') {
         return h('div', { className: 'presales-panel' },
@@ -1456,7 +1532,7 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('div', { className: 'presales-row' },
               status ? h('button', { className: `presales-badge ${status.ok ? 'ok' : 'err'}`, type: 'button' }, status.ok ? 'WPS 已连接' : '未连接') : null,
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void loadDevs() }, '刷新'))),
-          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估')),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估'), h('button', { className: 'presales-tab', type: 'button', onClick: () => void openAssets() }, '资料查询')),
           devForm ? renderDevEditor() : renderDevList(),
           msg ? h('div', { className: `presales-msg ${msg.kind === 'ok' ? 'ok' : 'err'}` }, msg.text) : null)
       }
@@ -1471,7 +1547,7 @@ button.presales-badge{background:transparent;cursor:pointer}
               status ? h('button', { className: `presales-badge ${status.ok ? 'ok' : 'err'}`, type: 'button', onClick: () => setShowCounts(!showCounts) }, status.ok ? 'WPS 已连接' : '未连接') : null,
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新'),
               h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估')),
+          h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估'), h('button', { className: 'presales-tab', type: 'button', onClick: () => void openAssets() }, '资料查询')),
           updatesOpen ? renderUpdateCard() : null,
           renderQuoteLedger())
       }
@@ -1490,7 +1566,7 @@ button.presales-badge{background:transparent;cursor:pointer}
             showCounts && status ? h('span', { className: 'presales-muted' }, `产品 ${status.counts?.products ?? '-'} · 客户 ${status.counts?.customers ?? '-'} · 报价 ${status.counts?.quotes ?? '-'}`) : null,
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新', updates && updates.some((u) => u.hasUpdate) ? h('span', { className: 'presales-dot' }) : null),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
-        h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估')),
+        h('div', { className: 'presales-tabs', role: 'tablist' }, tabBtn('customer', '客户'), tabBtn('opp', '商机'), tabBtn('quote', '报价'), tabBtn('rfq', '询价单'), tabBtn('dev', '定开评估'), h('button', { className: 'presales-tab', type: 'button', onClick: () => void openAssets() }, '资料查询')),
         updatesOpen ? renderUpdateCard() : null,
         h('div', { className: 'presales-row', style: { marginBottom: 8 } },
           h('button', { className: 'presales-btn', type: 'button', onClick: () => { setQuoteMode('list'); setMsg(null) } }, '← 返回报价台账')),
