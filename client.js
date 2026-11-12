@@ -465,6 +465,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       const [assetKey, setAssetKey] = React.useState('')
       const [assetData, setAssetData] = React.useState(null)
       const [assetQuery, setAssetQuery] = React.useState('')
+      const [assetKeyword, setAssetKeyword] = React.useState('')
       const [assetLoading, setAssetLoading] = React.useState(false)
       const devFileRef = React.useRef(null)
       const [lookupBusy, setLookupBusy] = React.useState(false)
@@ -1358,7 +1359,7 @@ button.presales-badge{background:transparent;cursor:pointer}
       }
 
       async function loadAsset(key) {
-        setAssetKey(key); setAssetData(null); setAssetLoading(true)
+        setAssetKey(key); setAssetData(null); setAssetKeyword(''); setAssetLoading(true)
         try { setAssetData(await api('asset_list?key=' + encodeURIComponent(key))) }
         catch (e) { setMsg({ kind: 'err', text: String(e.message || e) }) } finally { setAssetLoading(false) }
       }
@@ -1367,7 +1368,7 @@ button.presales-badge{background:transparent;cursor:pointer}
         const q = assetQuery.trim()
         if (!q) return
         const src = assetSources.find((x) => x.key === assetKey)
-        const prompt = `请用 cnbm知识库工具查询并回答：${q}\n\n资料范围：${src ? src.name : '资料查询'}。优先给出具体条目/字段；查不到就明确说未找到，不要编造。`
+        const prompt = `请用 cnbm知识库工具在「资料查询」的以下资料中检索并回答：${q}\n\n资料范围：知识产权（软件退税清单、论文、专利、软件著作权）、商务资料（测试报告、荣誉奖项、公司资质、财务审计报告）、人员档案。优先给出具体条目/来源；查不到就明确说未找到，不要编造。`
         const sessions = getSvc('sessions'); const svc = getSvc('uiWorkspace'); const lay = getSvc('layout')
         try {
           if (sessions && typeof sessions.create === 'function') {
@@ -1386,12 +1387,19 @@ button.presales-badge{background:transparent;cursor:pointer}
 
       function renderAssetPage() {
         const groups = [...new Set(assetSources.map((x) => x.group))]
+        const kw = assetKeyword.trim().toLowerCase()
+        const filteredRows = assetData ? assetData.rows.filter((r) => !kw || r.some((v) => String(v || '').toLowerCase().includes(kw))) : []
         return h('div', { className: 'presales-panel' },
           h('header', { className: 'presales-head' },
             h('div', null,
               h('div', { className: 'presales-title' }, '数字售前'),
               h('div', { className: 'presales-sub' }, '资料查询 · 知识产权 / 商务资料 / 人员档案')),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => setAssetOpen(false) }, '← 返回工作台')),
+          h('section', { className: 'presales-card' },
+            h('div', { className: 'presales-row' },
+              h('input', { className: 'presales-input', style: { flex: 1, minWidth: 260 }, placeholder: '问 AI：跨全部资料提问，例如“有哪些消防相关软著或资质”', value: assetQuery, onChange: (e) => setAssetQuery(e.target.value), onKeyDown: (e) => { if (e.key === 'Enter') void askAsset() } }),
+              h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void askAsset() }, '问 AI')),
+            h('div', { className: 'presales-muted', style: { marginTop: 6 } }, 'AI 搜索为通用检索，不受左侧资料分类限制')),
           h('div', { className: 'presales-row', style: { alignItems: 'stretch', flexWrap: 'nowrap', gap: 12 } },
             h('section', { className: 'presales-card', style: { width: 260, flex: '0 0 260px' } },
               h('b', null, '资料分类'),
@@ -1404,16 +1412,16 @@ button.presales-badge{background:transparent;cursor:pointer}
             h('section', { className: 'presales-card', style: { flex: '1 1 auto', minWidth: 0 } },
               h('div', { className: 'presales-row', style: { justifyContent: 'space-between' } },
                 h('b', null, assetData ? `${assetData.source}${assetData.sheetName ? ' · ' + assetData.sheetName : ''}` : '资料清单'),
-                h('span', { className: 'presales-muted' }, assetData ? `共 ${assetData.total} 条（前 50）` : '')),
+                h('span', { className: 'presales-muted' }, assetData ? `共 ${filteredRows.length} / ${assetData.total} 条（前 50）` : '')),
               h('div', { className: 'presales-row', style: { marginTop: 8 } },
-                h('input', { className: 'presales-input', style: { flex: 1, minWidth: 220 }, placeholder: '问 AI：例如“有哪些消防相关软著/资质”', value: assetQuery, onChange: (e) => setAssetQuery(e.target.value), onKeyDown: (e) => { if (e.key === 'Enter') void askAsset() } }),
-                h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void askAsset() }, '问 AI')),
+                h('input', { className: 'presales-input', style: { flex: 1, minWidth: 220 }, placeholder: '关键词筛选当前清单', value: assetKeyword, onChange: (e) => setAssetKeyword(e.target.value) }),
+                h('span', { className: 'presales-muted' }, assetData ? `匹配 ${filteredRows.length} / ${assetData.total}` : '')),
               assetLoading ? h('div', { className: 'presales-muted', style: { marginTop: 12 } }, '加载中…') : null,
               assetData && assetData.fields && assetData.fields.length ? h('div', { style: { overflowX: 'auto', marginTop: 10 } },
                 h('table', { className: 'presales-table', style: { minWidth: 900 } },
                   h('thead', null, h('tr', null, assetData.fields.map((f) => h('th', { key: f }, f)))),
-                  h('tbody', null, assetData.rows.map((row, i) => h('tr', { key: i }, row.map((v, j) => h('td', { key: j, title: v, style: { maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, v || '-'))))))) : null,
-              assetData && !assetData.rows.length ? h('div', { className: 'presales-muted', style: { marginTop: 10 } }, '该分类暂无数据') : null)))
+                  h('tbody', null, filteredRows.map((row, i) => h('tr', { key: i }, row.map((v, j) => h('td', { key: j, title: v, style: { maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, v || '-'))))))) : null,
+              assetData && !filteredRows.length ? h('div', { className: 'presales-muted', style: { marginTop: 10 } }, '该分类暂无数据') : null)))
       }
 
       function renderDevList() {
