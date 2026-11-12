@@ -1395,13 +1395,19 @@ button.presales-badge{background:transparent;cursor:pointer}
               h('div', { className: 'presales-title' }, '数字售前'),
               h('div', { className: 'presales-sub' }, '资料查询 · 知识产权 / 商务资料 / 人员档案')),
             h('button', { className: 'presales-btn', type: 'button', onClick: () => setAssetOpen(false) }, '← 返回工作台')),
+          h('div', { className: 'presales-tabs', role: 'tablist' },
+            ['customer:客户', 'opp:商机', 'quote:报价', 'rfq:询价单', 'dev:定开评估'].map((x) => {
+              const [id, label] = x.split(':')
+              return h('button', { key: id, className: 'presales-tab', type: 'button', 'aria-selected': false, onClick: () => { setAssetOpen(false); setTab(id) } }, label)
+            }),
+            h('button', { className: 'presales-tab', type: 'button', 'aria-selected': true }, '资料查询')),
           h('section', { className: 'presales-card' },
             h('div', { className: 'presales-row' },
               h('input', { className: 'presales-input', style: { flex: 1, minWidth: 260 }, placeholder: '问 AI：跨全部资料提问，例如“有哪些消防相关软著或资质”', value: assetQuery, onChange: (e) => setAssetQuery(e.target.value), onKeyDown: (e) => { if (e.key === 'Enter') void askAsset() } }),
               h('button', { className: 'presales-btn primary', type: 'button', onClick: () => void askAsset() }, '问 AI')),
             h('div', { className: 'presales-muted', style: { marginTop: 6 } }, 'AI 搜索为通用检索，不受左侧资料分类限制')),
           h('div', { className: 'presales-row', style: { alignItems: 'stretch', flexWrap: 'nowrap', gap: 12 } },
-            h('section', { className: 'presales-card', style: { width: 260, flex: '0 0 260px' } },
+            h('section', { className: 'presales-card', style: { width: 210, flex: '0 0 210px' } },
               h('b', null, '资料分类'),
               groups.map((g) => h('div', { key: g, style: { marginTop: 10 } },
                 h('div', { className: 'presales-muted', style: { marginBottom: 4 } }, g),
