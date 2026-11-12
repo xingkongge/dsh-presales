@@ -1469,6 +1469,8 @@ button.presales-badge{background:transparent;cursor:pointer}
           pager(quoteRows.length, quoteCur, setQuotePage, quoteSize))
       }
 
+      if (assetOpen) return renderAssetPage()
+
       if (tab === 'rfq') {
         return h('div', { className: 'presales-panel' },
           h('header', { className: 'presales-head' },
@@ -1520,8 +1522,6 @@ button.presales-badge{background:transparent;cursor:pointer}
           chatNotice ? h('div', { className: 'presales-msg ok' }, chatNotice) : null,
           h(OppTab, { onQuote: () => setTab('quote'), onNewOpp: () => void newOppChat() }))
       }
-
-      if (assetOpen) return renderAssetPage()
 
       if (tab === 'dev') {
         return h('div', { className: 'presales-panel' },
