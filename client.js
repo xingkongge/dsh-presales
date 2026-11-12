@@ -1393,8 +1393,11 @@ button.presales-badge{background:transparent;cursor:pointer}
           h('header', { className: 'presales-head' },
             h('div', null,
               h('div', { className: 'presales-title' }, '数字售前'),
-              h('div', { className: 'presales-sub' }, '资料查询 · 知识产权 / 商务资料 / 人员档案')),
-            h('button', { className: 'presales-btn', type: 'button', onClick: () => setAssetOpen(false) }, '← 返回工作台')),
+              h('div', { className: 'presales-sub' }, '商机推进 · 报价出单 · 询价协同')),
+            h('div', { className: 'presales-row' },
+              status ? h('button', { className: `presales-badge ${status.ok ? 'ok' : 'err'}`, type: 'button', onClick: () => setShowCounts(!showCounts) }, status.ok ? 'WPS 已连接' : '未连接') : null,
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => void toggleUpdates() }, updatesOpen ? '收起更新' : '插件更新'),
+              h('button', { className: 'presales-btn', type: 'button', onClick: () => void load() }, '刷新'))),
           h('div', { className: 'presales-tabs', role: 'tablist' },
             ['customer:客户', 'opp:商机', 'quote:报价', 'rfq:询价单', 'dev:定开评估'].map((x) => {
               const [id, label] = x.split(':')
